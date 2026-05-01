@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="KMI Reports"/>
+<meta name="theme-color" content="#c9a84c"/>
+<meta name="description" content="Knights Mobile Inspection — Professional Vehicle Report Generator"/>
+
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icons/icon-192.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png"/>
+
+<title>Knights Mobile Inspection</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+/* ── Reset & Variables ── */
+:root{
+  --bg:#0b0d12;--surface:#13161e;--card:#181c27;--border:#242836;
+  --gold:#c9a84c;--gold2:#e8c96d;--silver:#8a9bb5;
+  --green:#3ecf78;--red:#e8534a;--blue:#4a9eff;
+  --text:#eef0f7;--muted:#6b7896;
+  --fd:'Bebas Neue',sans-serif;
+  --fb:'DM Sans',sans-serif;
+  --fm:'DM Mono',monospace;
+  --r:10px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--fb);}
+
+/* ── Install Banner ── */
+#installBanner{
+  display:none;position:fixed;bottom:calc(var(--safe-bot) + 12px);left:12px;right:12px;
+  background:linear-gradient(135deg,#1c2030,#13161e);
+  border:1px solid var(--gold);border-radius:14px;
+  padding:14px 16px;z-index:9999;
+  box-shadow:0 8px 32px rgba(0,0,0,.6);
+  animation:slideUp .4s cubic-bezier(.34,1.56,.64,1);
+}
+#installBanner.show{display:flex;align-items:center;gap:12px;}
+@keyframes slideUp{from{transform:translateY(100px);opacity:0}to{transform:translateY(0);opacity:1}}
+.ib-icon{font-size:1.8rem;flex-shrink:0;}
+.ib-text h4{font-size:.88rem;font-weight:700;color:var(--gold);}
+.ib-text p{font-size:.72rem;color:var(--muted);margin-top:2px;}
+.ib-actions{display:flex;gap:8px;margin-left:auto;flex-shrink:0;}
+.ib-btn{padding:7px 14px;border-radius:8px;border:none;font-family:var(--fb);font-size:.78rem;font-weight:700;cursor:pointer;}
+.ib-install{background:var(--gold);color:#000;}
+.ib-dismiss{background:transparent;color:var(--muted);border:1px solid var(--border);}
+
+/* ── iOS Install Tip ── */
+#iosTip{
+  display:none;position:fixed;bottom:calc(var(--safe-bot)+12px);left:12px;right:12px;
+  background:#1c2030;border:1px solid var(--gold);border-radius:14px;
+  padding:14px 16px;z-index:9999;text-align:center;
+}
+#iosTip.show{display:block;}
+#iosTip p{font-size:.82rem;color:var(--text);}
+#iosTip strong{color:var(--gold);}
+#iosTip button{margin-top:10px;padding:7px 20px;background:var(--gold);color:#000;border:none;border-radius:8px;font-weight:700;font-size:.8rem;cursor:pointer;}
+
+/* ── App Shell ── */
+#app{
+  display:flex;flex-direction:column;height:100%;
+  padding-top:var(--safe-top);
+  padding-bottom:var(--safe-bot);
+}
+
+/* ── Top Bar ── */
+.topbar{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:0 16px;height:58px;display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;
+}
+.tbar-logo{display:flex;align-items:center;gap:10px;}
+.tbar-shield{
+  width:36px;height:36px;background:linear-gradient(135deg,var(--gold),var(--gold2));
+  border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;
+}
+.tbar-name{font-family:var(--fd);font-size:1.2rem;letter-spacing:1.5px;}
+.tbar-name span{color:var(--gold);}
+.tbar-right{display:flex;align-items:center;gap:8px;}
+.tbar-badge{
+  background:#c9a84c18;border:1px solid #c9a84c44;color:var(--gold);
+  font-size:.6rem;font-family:var(--fm);padding:3px 8px;border-radius:12px;letter-spacing:1px;
+}
+.btn-new-report{
+  background:transparent;border:1px solid var(--red);color:var(--red);
+  font-family:var(--fb);font-size:.72rem;font-weight:700;
+  padding:5px 10px;border-radius:8px;cursor:pointer;letter-spacing:.3px;
+}
+
+/* ── Confirm Modal ── */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:#000000cc;z-index:9000;
+  align-items:center;justify-content:center;padding:20px;
+}
+.modal-overlay.show{display:flex;}
+.modal-box{
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  padding:28px 24px;width:100%;max-width:320px;text-align:center;
+}
+.modal-icon{font-size:2.5rem;margin-bottom:12px;}
+.modal-title{font-family:var(--fd);font-size:1.6rem;letter-spacing:2px;color:var(--text);margin-bottom:8px;}
+.modal-sub{font-size:.82rem;color:var(--muted);margin-bottom:24px;line-height:1.5;}
+.modal-btns{display:flex;gap:10px;}
+.modal-cancel{flex:1;background:transparent;border:1px solid var(--border);color:var(--text);padding:12px;border-radius:10px;font-family:var(--fb);font-size:.88rem;font-weight:600;cursor:pointer;}
+.modal-confirm{flex:1;background:var(--red);border:none;color:#fff;padding:12px;border-radius:10px;font-family:var(--fb);font-size:.88rem;font-weight:700;cursor:pointer;}
+
+/* ── Step Tabs (scrollable horizontal) ── */
+.step-tabs{
+  display:flex;background:var(--surface);border-bottom:1px solid var(--border);
+  overflow-x:auto;flex-shrink:0;scrollbar-width:none;
+}
+.step-tabs::-webkit-scrollbar{display:none;}
+.stab{
+  flex-shrink:0;padding:10px 14px;background:transparent;border:none;
+  color:var(--muted);font-family:var(--fb);font-size:.72rem;font-weight:500;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:all .2s;border-bottom:2px solid transparent;min-width:72px;
+}
+.stab.active{color:var(--gold);border-bottom-color:var(--gold);}
+.stab.done{color:var(--green);}
+.stab .snum{
+  width:20px;height:20px;border-radius:50%;background:var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.65rem;font-family:var(--fm);font-weight:600;flex-shrink:0;
+}
+.stab.active .snum{background:var(--gold);color:#000;}
+.stab.done .snum{background:var(--green);color:#000;}
+.stab .slbl{font-size:.62rem;}
+
+/* ── Scroll Body ── */
+.scroll-body{
+  flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:16px 14px 100px;
+}
+
+/* ── Bottom Nav ── */
+.bottom-nav{
+  position:fixed;bottom:var(--safe-bot);left:0;right:0;
+  background:var(--surface);border-top:1px solid var(--border);
+  display:flex;gap:10px;padding:10px 14px;
+}
+.btn-back{flex:1;background:transparent;border:1px solid var(--border);color:var(--text);border-radius:10px;padding:12px;font-family:var(--fb);font-size:.85rem;font-weight:600;cursor:pointer;}
+.btn-next{flex:2;background:var(--gold);border:none;color:#000;border-radius:10px;padding:12px;font-family:var(--fb);font-size:.85rem;font-weight:700;cursor:pointer;}
+.btn-generate-main{
+  flex:1;background:linear-gradient(135deg,var(--gold),var(--gold2));
+  border:none;color:#000;border-radius:10px;padding:14px;
+  font-family:var(--fb);font-size:.9rem;font-weight:700;cursor:pointer;
+  letter-spacing:.5px;
+}
+
+/* ── Sections ── */
+.section{display:none;animation:fadeIn .25s ease;}
+.section.active{display:block;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.sec-title{font-family:var(--fd);font-size:1.7rem;letter-spacing:2px;margin-bottom:.15rem;}
+.sec-title span{color:var(--gold);}
+.sec-sub{color:var(--muted);font-size:.8rem;margin-bottom:1.4rem;}
+
+/* ── Cards ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:12px;}
+.card-title{
+  font-size:.65rem;font-family:var(--fm);letter-spacing:2px;text-transform:uppercase;
+  color:var(--gold);margin-bottom:14px;display:flex;align-items:center;gap:8px;
+}
+.card-title::after{content:'';flex:1;height:1px;background:var(--border);}
+.badge{font-size:.58rem;padding:2px 7px;border-radius:8px;font-family:var(--fm);}
+.badge-gold{background:#c9a84c22;color:var(--gold);border:1px solid #c9a84c40;}
+.badge-blue{background:#4a9eff22;color:var(--blue);border:1px solid #4a9eff40;}
+.badge-red{background:#e8534a22;color:var(--red);border:1px solid #e8534a40;}
+
+/* ── Grids ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.span2{grid-column:span 2;}
+.span3{grid-column:span 3;}
+
+/* ── Fields ── */
+.field{display:flex;flex-direction:column;gap:5px;}
+.field label{font-size:.68rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+.field input,.field select,.field textarea{
+  background:var(--surface);border:1px solid var(--border);border-radius:8px;
+  color:var(--text);font-family:var(--fb);font-size:.9rem;
+  padding:10px 12px;outline:none;width:100%;
+  -webkit-appearance:none;appearance:none;
+}
+.field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold);}
+.field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7896' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px;}
+.field select option{background:#13161e;}
+.field textarea{resize:vertical;min-height:72px;}
+
+/* ── Report type chips ── */
+.type-chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px;}
+.type-chip{
+  padding:8px 14px;border-radius:20px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:var(--fb);
+  font-size:.8rem;cursor:pointer;transition:all .2s;
+}
+.type-chip.active{background:var(--gold);color:#000;border-color:var(--gold);font-weight:700;}
+.type-chip.warranty.active{background:linear-gradient(135deg,var(--gold),var(--blue));color:#000;}
+
+/* ── Warranty Banner ── */
+.war-banner{
+  background:linear-gradient(135deg,#c9a84c15,#4a9eff15);
+  border:1px solid #c9a84c40;border-radius:var(--r);
+  padding:12px 14px;margin-bottom:12px;
+  display:flex;align-items:flex-start;gap:12px;
+}
+.war-banner-icon{font-size:1.6rem;flex-shrink:0;}
+.war-banner-text h4{font-size:.85rem;font-weight:700;color:var(--gold);}
+.war-banner-text p{font-size:.75rem;color:var(--muted);margin-top:3px;}
+
+/* ── Checklist ── */
+.cl-grid{display:flex;flex-direction:column;gap:7px;}
+.cl-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:9px;
+  transition:all .15s;
+}
+.cl-item.pass{border-color:var(--green);background:#3ecf7812;}
+.cl-item.fail{border-color:var(--red);background:#e8534a12;}
+.cl-item.covered{border-color:var(--blue);background:#4a9eff12;}
+.cl-toggle{display:flex;border-radius:7px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;}
+.tgl{
+  padding:5px 9px;font-size:.68rem;font-weight:700;font-family:var(--fm);
+  cursor:pointer;border:none;background:transparent;color:var(--muted);
+  transition:all .15s;min-width:30px;
+}
+.tgl.p-on{background:var(--green);color:#000;}
+.tgl.f-on{background:var(--red);color:#fff;}
+.tgl.c-on{background:var(--blue);color:#fff;}
+.cl-label{font-size:.84rem;flex:1;line-height:1.3;}
+.cl-cov-tag{font-size:.58rem;color:var(--blue);font-family:var(--fm);background:#4a9eff20;padding:2px 6px;border-radius:4px;flex-shrink:0;}
+
+/* ── Media upload ── */
+.media-tabs{display:flex;gap:7px;margin-bottom:12px;}
+.mtab{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.8rem;cursor:pointer;transition:all .2s;}
+.mtab.active{background:var(--gold);color:#000;border-color:var(--gold);font-weight:700;}
+.upload-zone{
+  border:2px dashed var(--border);border-radius:var(--r);padding:24px 16px;
+  text-align:center;cursor:pointer;background:var(--surface);transition:all .2s;
+}
+.upload-zone:active{border-color:var(--gold);background:#c9a84c08;}
+.uz-icon{font-size:2rem;margin-bottom:8px;}
+.uz-text{color:var(--muted);font-size:.82rem;}
+.uz-text strong{color:var(--gold);}
+.media-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;}
+.media-thumb{position:relative;border-radius:8px;overflow:hidden;aspect-ratio:4/3;border:1px solid var(--border);background:var(--surface);}
+.media-thumb img,.media-thumb video{width:100%;height:100%;object-fit:cover;display:block;}
+.media-rm{
+  position:absolute;top:4px;right:4px;width:22px;height:22px;
+  border-radius:50%;background:#000000cc;border:none;color:#fff;
+  font-size:.9rem;cursor:pointer;display:flex;align-items:center;justify-content:center;
+}
+.media-cap{
+  position:absolute;bottom:0;left:0;right:0;padding:3px 5px;
+  background:linear-gradient(transparent,#000000cc);font-size:.58rem;
+  color:#ffffffcc;font-family:var(--fm);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+
+/* ── Signature ── */
+.sig-wrap{background:var(--surface);border:1px solid var(--border);border-radius:9px;overflow:hidden;}
+.sig-canvas{display:block;width:100%;height:120px;cursor:crosshair;touch-action:none;}
+.sig-foot{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border-top:1px solid var(--border);}
+.sig-label{font-size:.72rem;color:var(--muted);}
+.btn-clr{background:transparent;border:1px solid var(--red);color:var(--red);padding:5px 12px;border-radius:7px;font-size:.75rem;cursor:pointer;}
+
+/* ── Preview ── */
+.prev-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px;}
+.prev-box{background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px;}
+.prev-lbl{font-size:.62rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
+.prev-val{font-size:.9rem;font-weight:700;}
+.sum-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.sb{padding:7px 14px;border-radius:8px;font-size:.75rem;font-weight:700;font-family:var(--fm);}
+.sb-pass{background:#3ecf7820;color:var(--green);border:1px solid var(--green);}
+.sb-fail{background:#e8534a20;color:var(--red);border:1px solid var(--red);}
+.sb-cov{background:#4a9eff20;color:var(--blue);border:1px solid var(--blue);}
+.sb-na{background:var(--surface);color:var(--muted);border:1px solid var(--border);}
+
+/* ── Progress ── */
+.prog-wrap{margin-top:12px;display:none;}
+.prog-wrap.show{display:block;}
+.prog-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--gold2));transition:width .4s ease;width:0;}
+.prog-lbl{font-size:.72rem;color:var(--muted);text-align:center;margin-top:5px;}
+
+/* ── Toast ── */
+.toast{
+  position:fixed;bottom:calc(var(--safe-bot)+80px);left:16px;right:16px;
+  background:var(--green);color:#000;padding:12px 16px;border-radius:12px;
+  font-weight:700;font-size:.85rem;text-align:center;
+  transform:translateY(20px);opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);
+  z-index:9998;pointer-events:none;
+}
+.toast.show{transform:translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="tbar-logo">
+      <div class="tbar-shield">🛡️</div>
+      <div class="tbar-name">KNIGHTS <span>MOBILE</span></div>
+    </div>
+    <div class="tbar-right">
+      <button class="btn-new-report" onclick="confirmNewReport()">⊕ New Report</button>
+    </div>
+  </header>
+
+  <!-- New Report Confirm Modal -->
+  <div class="modal-overlay" id="newReportModal">
+    <div class="modal-box">
+      <div class="modal-icon">🗑️</div>
+      <div class="modal-title">NEW <span style="color:var(--gold)">REPORT</span></div>
+      <p class="modal-sub">This will clear all fields, photos, signatures and checklist. The current report will be lost.</p>
+      <div class="modal-btns">
+        <button class="modal-cancel" onclick="document.getElementById('newReportModal').classList.remove('show')">Cancel</button>
+        <button class="modal-confirm" onclick="resetAll()">Clear & Start New</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step Tabs -->
+  <nav class="step-tabs" id="stepTabs">
+    <button class="stab active" onclick="goTo(0)" id="sb0"><div class="snum">1</div><div class="slbl">Vehicle</div></button>
+    <button class="stab" onclick="goTo(1)" id="sb1"><div class="snum">2</div><div class="slbl">Warranty</div></button>
+    <button class="stab" onclick="goTo(2)" id="sb2"><div class="snum">3</div><div class="slbl">Mechanical</div></button>
+    <button class="stab" onclick="goTo(3)" id="sb3"><div class="snum">4</div><div class="slbl">Checklist</div></button>
+    <button class="stab" onclick="goTo(4)" id="sb4"><div class="snum">5</div><div class="slbl">Media</div></button>
+    <button class="stab" onclick="goTo(5)" id="sb5"><div class="snum">6</div><div class="slbl">Sign</div></button>
+    <button class="stab" onclick="goTo(6)" id="sb6"><div class="snum">7</div><div class="slbl">Generate</div></button>
+  </nav>
+
+  <!-- Scroll Body -->
+  <div class="scroll-body" id="scrollBody">
+
+    <!-- ── STEP 0: Vehicle Info ─────────────────────────── -->
+    <div class="section active" id="sec0">
+      <div class="sec-title">Vehicle <span>Info</span></div>
+      <p class="sec-sub">Select inspection type and enter all details.</p>
+
+      <div class="type-chips">
+        <button class="type-chip active" onclick="setType(this,'Pre-Purchase Inspection')">🔍 Pre-Purchase</button>
+        <button class="type-chip" onclick="setType(this,'Damage / Accident Report')">⚠️ Damage</button>
+        <button class="type-chip" onclick="setType(this,'General Condition')">📋 General</button>
+        <button class="type-chip warranty" onclick="setType(this,'Aftermarket Warranty Inspection')">🛡️ Warranty</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Inspector</div>
+        <div class="g2">
+          <div class="field"><label>Inspector Name</label><input id="inspectorName" placeholder="Your name" autocomplete="name"/></div>
+          <div class="field"><label>Cert / License #</label><input id="inspLicense" placeholder="ASE-12345"/></div>
+          <div class="field"><label>Phone</label><input id="companyPhone" type="tel" placeholder="(555) 123-4567" autocomplete="tel"/></div>
+          <div class="field"><label>Email</label><input id="companyEmail" type="email" placeholder="you@kmi.com" autocomplete="email"/></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Customer</div>
+        <div class="g2">
+          <div class="field"><label>Customer Name</label><input id="customerName" placeholder="Jane Doe" autocomplete="name"/></div>
+          <div class="field"><label>Customer Phone</label><input id="customerPhone" type="tel" placeholder="(555) 987-6543" autocomplete="tel"/></div>
+          <div class="field"><label>Date</label><input id="inspDate" type="date"/></div>
+          <div class="field"><label>Report #</label><input id="reportNum" placeholder="KMI-001"/></div>
+          <div class="field span2"><label>Inspection Address</label><input id="inspLocation" placeholder="123 Main St, Houston TX" autocomplete="street-address"/></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Vehicle</div>
+        <div class="g3">
+          <div class="field"><label>Year</label><input id="vYear" placeholder="2021" inputmode="numeric"/></div>
+          <div class="field"><label>Make</label><input id="vMake" placeholder="Ford"/></div>
+          <div class="field"><label>Model</label><input id="vModel" placeholder="F-150"/></div>
+          <div class="field span2"><label>Trim / Package</label><input id="vTrim" placeholder="XLT Sport"/></div>
+          <div class="field"><label>Color</label><input id="vColor" placeholder="White"/></div>
+          <div class="field span2"><label>VIN</label><input id="vVin" placeholder="1FTFW1ET..." autocomplete="off" autocapitalize="characters"/></div>
+          <div class="field"><label>Plate</label><input id="vPlate" placeholder="ABC 1234" autocapitalize="characters"/></div>
+          <div class="field"><label>State</label><input id="vState" placeholder="TX" maxlength="2" autocapitalize="characters"/></div>
+          <div class="field"><label>Body</label>
+            <select id="vBody"><option value="">Body...</option><option>Sedan</option><option>SUV/Crossover</option><option>Truck/Pickup</option><option>Van/Minivan</option><option>Coupe</option><option>Convertible</option><option>Wagon</option><option>Hatchback</option></select>
+          </div>
+          <div class="field"><label>Trans.</label>
+            <select id="vTrans"><option value="">Trans...</option><option>Automatic</option><option>Manual</option><option>CVT</option><option>DCT</option></select>
+          </div>
+          <div class="field"><label>Drive</label>
+            <select id="vDrive"><option value="">Drive...</option><option>FWD</option><option>RWD</option><option>AWD</option><option>4WD</option></select>
+          </div>
+          <div class="field"><label>Fuel</label>
+            <select id="vFuel"><option value="">Fuel...</option><option>Gasoline</option><option>Diesel</option><option>Hybrid</option><option>Plug-in Hybrid</option><option>Electric</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">General Notes</div>
+        <div class="field"><textarea id="genNotes" placeholder="General observations..."></textarea></div>
+      </div>
+    </div>
+
+    <!-- ── STEP 1: Warranty ────────────────────────────── -->
+    <div class="section" id="sec1">
+      <div class="sec-title">Warranty <span>Info</span></div>
+      <p class="sec-sub">Complete for Aftermarket Warranty Inspections.</p>
+
+      <div class="war-banner">
+        <div class="war-banner-icon">🛡️</div>
+        <div class="war-banner-text">
+          <h4>Warranty Claim Documentation</h4>
+          <p>All fields will appear prominently on the PDF for the warranty company.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Warranty Company <span class="badge badge-gold">Required</span></div>
+        <div class="g2">
+          <div class="field span2"><label>Warranty Company Name</label><input id="warCompany" placeholder="e.g. Endurance, CARCHEX"/></div>
+          <div class="field"><label>Claim / Contract #</label><input id="warClaim" placeholder="CLM-2026-001"/></div>
+          <div class="field"><label>Adjuster Name</label><input id="warAdjuster" placeholder="John Smith"/></div>
+          <div class="field"><label>Warranty Phone</label><input id="warPhone" type="tel" placeholder="(800) 555-1234"/></div>
+          <div class="field"><label>Plan Type</label>
+            <select id="warPlan"><option value="">Select plan...</option><option>Powertrain Only</option><option>Powertrain + Drivetrain</option><option>Named Component</option><option>Bumper-to-Bumper</option><option>Extended Vehicle Protection</option><option>Custom / Other</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Odometer Verification <span class="badge badge-blue">Critical</span></div>
+        <div class="g2">
+          <div class="field"><label>Current Odometer (mi)</label><input id="odomCurrent" placeholder="72,481" inputmode="numeric"/></div>
+          <div class="field"><label>Policy Start Mileage</label><input id="odomPolicy" placeholder="65,000" inputmode="numeric"/></div>
+          <div class="field"><label>Max Covered Mileage</label><input id="odomMax" placeholder="100,000" inputmode="numeric"/></div>
+          <div class="field"><label>Odometer Condition</label>
+            <select id="odomCondition"><option value="">Select...</option><option>OEM / Original</option><option>Replaced (documented)</option><option>Suspected Rollback</option><option>Unknown</option></select>
+          </div>
+          <div class="field"><label>Last Service Mileage</label><input id="odomLastService" placeholder="70,000" inputmode="numeric"/></div>
+          <div class="field"><label>Odometer Photo Taken?</label>
+            <select id="odomPhoto"><option value="">Select...</option><option>Yes</option><option>No</option></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Prior Repair History</div>
+        <div class="g2">
+          <div class="field"><label>Last Repair Shop</label><input id="repairShop" placeholder="ABC Auto Repair"/></div>
+          <div class="field"><label>Last Service Date</label><input id="lastServiceDate" type="date"/></div>
+          <div class="field span2"><label>Last Known Repair</label><input id="lastRepair" placeholder="Oil change, rear brakes..."/></div>
+          <div class="field span2"><label>Service Records Available?</label>
+            <select id="serviceRecords"><option value="">Select...</option><option>Yes – Physical</option><option>Yes – Digital</option><option>Partial</option><option>None</option></select>
+          </div>
+          <div class="field span2"><label>Known Prior Issues / Damage History</label>
+            <textarea id="priorIssues" placeholder="Describe any prior damage or repairs..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Pre-Existing Damage <span class="badge badge-red">Important</span></div>
+        <div class="field"><textarea id="preExistingDamage" placeholder="Document ALL pre-existing damage before the claimed failure. Be specific — location, severity, relation to claim..." style="min-height:90px;"></textarea></div>
+      </div>
+    </div>
+
+    <!-- ── STEP 2: Mechanical ──────────────────────────── -->
+    <div class="section" id="sec2">
+      <div class="sec-title">Mechanical <span>Inspection</span></div>
+      <p class="sec-sub">Document all readings and component conditions.</p>
+
+      <div class="card">
+        <div class="card-title">Engine</div>
+        <div class="g2">
+          <div class="field span2"><label>Engine Size / Config</label><input id="engSize" placeholder="3.5L V6 EcoBoost"/></div>
+          <div class="field"><label>Condition</label><select id="engCondition"><option value="">Select...</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option><option>Inoperable</option></select></div>
+          <div class="field"><label>Cold Start Idle</label><select id="engIdle"><option value="">Select...</option><option>Smooth</option><option>Rough</option><option>Misfire</option><option>No Start</option></select></div>
+          <div class="field"><label>Engine Temp</label><input id="engTemp" placeholder="195°F – Normal"/></div>
+          <div class="field"><label>Oil Level</label><select id="oilLevel"><option value="">Select...</option><option>Full</option><option>Low – 1 qt</option><option>Low – 2 qt+</option><option>Empty</option></select></div>
+          <div class="field"><label>Oil Condition</label><select id="oilColor"><option value="">Select...</option><option>Clean / Amber</option><option>Dark / Dirty</option><option>Milky (coolant mix)</option><option>Metallic particles</option></select></div>
+          <div class="field"><label>Oil Pressure</label><input id="oilPressure" placeholder="45 psi"/></div>
+          <div class="field"><label>Coolant Level</label><select id="coolantLevel"><option value="">Select...</option><option>Full</option><option>Low</option><option>Empty</option></select></div>
+          <div class="field"><label>Coolant Condition</label><select id="coolantColor"><option value="">Select...</option><option>Clean</option><option>Rusty/Contaminated</option><option>Milky (oil mix)</option></select></div>
+          <div class="field"><label>Check Engine Light</label><select id="cel"><option value="">Select...</option><option>No – Off</option><option>Yes – On</option><option>Yes – Flashing</option></select></div>
+          <div class="field"><label>OBD-II Scan</label><select id="obdScan"><option value="">Select...</option><option>Yes – No codes</option><option>Yes – Codes found</option><option>No</option></select></div>
+          <div class="field span2"><label>DTC / Fault Codes</label><input id="dtcCodes" placeholder="P0300, P0171..."/></div>
+          <div class="field span2"><label>Engine Notes</label><textarea id="engNotes" placeholder="Additional engine observations..."></textarea></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Transmission &amp; Drivetrain</div>
+        <div class="g2">
+          <div class="field"><label>Trans. Fluid Level</label><select id="transFluid"><option value="">Select...</option><option>Full</option><option>Low</option><option>Empty/Dry</option></select></div>
+          <div class="field"><label>Fluid Condition</label><select id="transCond"><option value="">Select...</option><option>Clean/Pink-Red</option><option>Dark/Burnt</option><option>Metallic</option></select></div>
+          <div class="field"><label>Shift Quality</label><select id="shiftQuality"><option value="">Select...</option><option>Smooth</option><option>Slight delay</option><option>Hard shifts</option><option>Slipping</option><option>No engagement</option></select></div>
+          <div class="field"><label>CV Axles</label><select id="cvAxles"><option value="">Select...</option><option>Good</option><option>Minor wear</option><option>Torn boot</option><option>Failed</option></select></div>
+          <div class="field"><label>Differential</label><select id="diffCond"><option value="">Select...</option><option>Good</option><option>Leaking</option><option>Noisy</option><option>N/A</option></select></div>
+          <div class="field"><label>Transfer Case</label><select id="transferCase"><option value="">Select...</option><option>Good</option><option>Leaking</option><option>Inoperable</option><option>N/A</option></select></div>
+          <div class="field span2"><label>Drivetrain Notes</label><textarea id="driveNotes" placeholder="Drivetrain observations..."></textarea></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Brakes &amp; Suspension</div>
+        <div class="g2">
+          <div class="field"><label>Front Brake Pad %</label><input id="brkFrontPad" placeholder="60%" inputmode="numeric"/></div>
+          <div class="field"><label>Rear Brake Pad %</label><input id="brkRearPad" placeholder="40%" inputmode="numeric"/></div>
+          <div class="field"><label>Front Rotor</label><select id="brkFrontRotor"><option value="">Select...</option><option>Good</option><option>Light scoring</option><option>Heavy scoring</option><option>Cracked</option></select></div>
+          <div class="field"><label>Rear Rotor</label><select id="brkRearRotor"><option value="">Select...</option><option>Good</option><option>Light scoring</option><option>Heavy scoring</option><option>Cracked</option><option>Drum – Good</option><option>Drum – Worn</option></select></div>
+          <div class="field"><label>Brake Fluid Level</label><select id="brkFluid"><option value="">Select...</option><option>Full</option><option>Low</option><option>Empty</option></select></div>
+          <div class="field"><label>Fluid Condition</label><select id="brkFluidCond"><option value="">Select...</option><option>Clear</option><option>Dark/Contaminated</option></select></div>
+          <div class="field"><label>E-Brake</label><select id="eBrake"><option value="">Select...</option><option>Functional</option><option>Weak</option><option>Not Functional</option></select></div>
+          <div class="field"><label>ABS Light</label><select id="absLight"><option value="">Select...</option><option>No</option><option>Yes</option></select></div>
+          <div class="field"><label>Front Shocks/Struts</label><select id="shocksFront"><option value="">Select...</option><option>Good</option><option>Worn</option><option>Leaking</option><option>Failed</option></select></div>
+          <div class="field"><label>Rear Shocks/Struts</label><select id="shocksRear"><option value="">Select...</option><option>Good</option><option>Worn</option><option>Leaking</option><option>Failed</option></select></div>
+          <div class="field"><label>Ball Joints</label><select id="ballJoints"><option value="">Select...</option><option>Good</option><option>Minor play</option><option>Excessive play</option></select></div>
+          <div class="field"><label>Tie Rods</label><select id="tieRods"><option value="">Select...</option><option>Good</option><option>Minor play</option><option>Excessive play</option></select></div>
+          <div class="field span2"><label>Suspension Notes</label><textarea id="suspNotes" placeholder="Suspension findings..."></textarea></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Fluids &amp; Belts</div>
+        <div class="g2">
+          <div class="field"><label>Power Steering</label><select id="psFluid"><option value="">Select...</option><option>Full – Good</option><option>Low</option><option>Leaking</option><option>Electric – N/A</option></select></div>
+          <div class="field"><label>A/C Refrigerant</label><select id="acRefrig"><option value="">Select...</option><option>Charged – Cold</option><option>Low</option><option>Not Functional</option></select></div>
+          <div class="field"><label>Timing Belt/Chain</label><select id="timingBelt"><option value="">Select...</option><option>Chain – Good</option><option>Belt – Good</option><option>Belt – Needs Replacement</option><option>Unknown</option></select></div>
+          <div class="field"><label>Serpentine Belt</label><select id="serpBelt"><option value="">Select...</option><option>Good</option><option>Cracked</option><option>Frayed</option><option>Missing</option></select></div>
+          <div class="field"><label>Coolant Hoses</label><select id="coolantHoses"><option value="">Select...</option><option>Good</option><option>Soft/Spongy</option><option>Cracked</option><option>Leaking</option></select></div>
+          <div class="field"><label>Vacuum Lines</label><select id="vacLines"><option value="">Select...</option><option>Good</option><option>Cracked</option><option>Disconnected</option></select></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Electrical &amp; Battery</div>
+        <div class="g2">
+          <div class="field"><label>Battery Condition</label><select id="batCond"><option value="">Select...</option><option>Good</option><option>Weak – Test</option><option>Failed</option><option>Corroded terminals</option></select></div>
+          <div class="field"><label>Battery Voltage</label><input id="batVoltage" placeholder="12.6V"/></div>
+          <div class="field"><label>Charging Voltage</label><input id="chargeVoltage" placeholder="14.2V"/></div>
+          <div class="field"><label>Alternator</label><select id="alternator"><option value="">Select...</option><option>Good</option><option>Weak</option><option>Failed</option></select></div>
+          <div class="field"><label>Starter</label><select id="starter"><option value="">Select...</option><option>Good</option><option>Slow crank</option><option>Failed</option></select></div>
+          <div class="field"><label>Warning Lights</label><input id="warningLights" placeholder="TPMS, ABS..."/></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Tires &amp; Wheels</div>
+        <div class="g2">
+          <div class="field"><label>LF Tread (32nds)</label><input id="tireLF" placeholder="8/32"/></div>
+          <div class="field"><label>RF Tread (32nds)</label><input id="tireRF" placeholder="8/32"/></div>
+          <div class="field"><label>LR Tread (32nds)</label><input id="tireLR" placeholder="7/32"/></div>
+          <div class="field"><label>RR Tread (32nds)</label><input id="tireRR" placeholder="7/32"/></div>
+          <div class="field span2"><label>Tire Brand / Size</label><input id="tireBrand" placeholder="Michelin 265/70R17"/></div>
+          <div class="field"><label>Tire Condition</label><select id="tireCond"><option value="">Select...</option><option>Good – Even wear</option><option>Inner edge wear</option><option>Outer edge wear</option><option>Cupping</option><option>Needs replacement</option></select></div>
+          <div class="field"><label>Wheel Condition</label><select id="wheelCond"><option value="">Select...</option><option>Good</option><option>Minor curb rash</option><option>Bent/Cracked</option></select></div>
+          <div class="field span2"><label>Spare Tire</label><select id="spareTire"><option value="">Select...</option><option>Full size – Good</option><option>Compact – Good</option><option>Flat/Missing</option><option>N/A</option></select></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 3: Checklist ───────────────────────────── -->
+    <div class="section" id="sec3">
+      <div class="sec-title">Inspection <span>Checklist</span></div>
+      <p class="sec-sub">P = Pass · F = Fail · C = Covered (Warranty)</p>
+      <div id="clContainer"></div>
+    </div>
+
+    <!-- ── STEP 4: Media ───────────────────────────────── -->
+    <div class="section" id="sec4">
+      <div class="sec-title">Photos &amp; <span>Video</span></div>
+      <p class="sec-sub">Photos go in the PDF gallery. Videos are listed by filename.</p>
+      <div class="card">
+        <div class="media-tabs">
+          <button class="mtab active" onclick="setMTab(this,'photo')">📷 Photos</button>
+          <button class="mtab" onclick="setMTab(this,'video')">🎥 Video</button>
+        </div>
+        <div id="photoArea">
+          <div class="upload-zone" onclick="document.getElementById('photoInput').click()">
+            <div class="uz-icon">📷</div>
+            <p class="uz-text"><strong>Tap to upload photos</strong></p>
+            <p class="uz-text" style="font-size:.72rem;margin-top:4px">JPG · PNG · WEBP — up to 30</p>
+          </div>
+          <input type="file" id="photoInput" accept="image/*" multiple style="display:none" onchange="handlePhotos(this.files)"/>
+          <div class="media-grid" id="photoGrid"></div>
+        </div>
+        <div id="videoArea" style="display:none">
+          <div class="upload-zone" onclick="document.getElementById('videoInput').click()">
+            <div class="uz-icon">🎥</div>
+            <p class="uz-text"><strong>Tap to upload video clips</strong></p>
+            <p class="uz-text" style="font-size:.72rem;margin-top:4px">MP4 · MOV — up to 5 clips</p>
+          </div>
+          <input type="file" id="videoInput" accept="video/*" multiple style="display:none" onchange="handleVideos(this.files)"/>
+          <div class="media-grid" id="videoGrid"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 5: Signatures ─────────────────────────── -->
+    <div class="section" id="sec5">
+      <div class="sec-title">Certify &amp; <span>Sign</span></div>
+      <p class="sec-sub">Sign to certify this report is accurate.</p>
+      <div class="card">
+        <div class="card-title">Inspector Signature</div>
+        <div class="sig-wrap">
+          <canvas class="sig-canvas" id="sigCanvas"></canvas>
+          <div class="sig-foot">
+            <span class="sig-label">Sign above with finger or stylus</span>
+            <button class="btn-clr" onclick="clearSig('sigCanvas')">Clear</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Customer Signature <span class="badge badge-gold">Optional</span></div>
+        <div class="sig-wrap">
+          <canvas class="sig-canvas" id="custSigCanvas"></canvas>
+          <div class="sig-foot">
+            <span class="sig-label">Customer / vehicle owner</span>
+            <button class="btn-clr" onclick="clearSig('custSigCanvas')">Clear</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 6: Generate ───────────────────────────── -->
+    <div class="section" id="sec6">
+      <div class="sec-title">Review &amp; <span>Generate</span></div>
+      <p class="sec-sub">Confirm details then download your PDF report.</p>
+      <div id="previewPane"></div>
+      <div class="prog-wrap" id="progWrap">
+        <div class="prog-bar"><div class="prog-fill" id="progFill"></div></div>
+        <div class="prog-lbl" id="progLbl">Building report...</div>
+      </div>
+    </div>
+
+  </div><!-- /scroll-body -->
+
+  <!-- Bottom Nav -->
+  <div class="bottom-nav" id="bottomNav">
+    <button class="btn-back" id="btnBack" onclick="goBack()">← Back</button>
+    <button class="btn-next" id="btnNext" onclick="goNext()">Next →</button>
+  </div>
+
+</div><!-- /app -->
+
+<!-- Install Banner (Android/Chrome) -->
+<div id="installBanner">
+  <div class="ib-icon">🛡️</div>
+  <div class="ib-text">
+    <h4>Add to Home Screen</h4>
+    <p>Access KMI Reports like an app</p>
+  </div>
+  <div class="ib-actions">
+    <button class="ib-btn ib-install" id="installBtn">Install</button>
+    <button class="ib-btn ib-dismiss" onclick="document.getElementById('installBanner').classList.remove('show')">✕</button>
+  </div>
+</div>
+
+<!-- iOS Tip -->
+<div id="iosTip">
+  <p>To install on iPhone:<br/><strong>Tap Share ↑ then "Add to Home Screen"</strong></p>
+  <button onclick="document.getElementById('iosTip').classList.remove('show')">Got it</button>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════
+let step = 0;
+let reportType = 'Pre-Purchase Inspection';
+let photos = [];
+let videos = [];
+let checks = {};
+
+const STEPS = 7;
+
+// ══════════════════════════════════════════════════════
+// CHECKLIST DATA
+// ══════════════════════════════════════════════════════
+const CL = [
+  {title:'Exterior', items:['Hood / Bonnet','Front Bumper','Rear Bumper','Driver Door','Passenger Door','Rear Driver Door','Rear Pass. Door','Roof','Trunk / Hatch','Paint Condition','Windshield / Glass','Wipers','Headlights','Tail Lights','Turn Signals','Mirrors']},
+  {title:'Interior', items:['Dashboard / Gauges','Steering Wheel','Seats & Upholstery','Seatbelts (all)','Air Conditioning','Heating / Defrost','Infotainment / Radio','Backup Camera','Power Windows','Power Locks','Horn','Airbag Indicators','Interior Lights']},
+  {title:'Engine Bay', items:['Engine Start / Idle','Engine Mounts','Air Filter','Exhaust Smoke','Exhaust System','Fuel Lines','Catalytic Converter']},
+  {title:'Underbody', items:['Frame Integrity','Floor Pans','Subframe','Fuel Tank','Underbody Corrosion']},
+  {title:'Safety', items:['SRS / Airbag System','Traction Control','Stability Control','Emergency Brake Assist','TPMS Sensor']},
+];
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  const d = new Date().toISOString().split('T')[0];
+  document.getElementById('inspDate').value = d;
+  document.getElementById('reportNum').value = 'KMI-' + Date.now().toString().slice(-5);
+  setupSig('sigCanvas');
+  setupSig('custSigCanvas');
+  initPWA();
+});
+
+// ══════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════
+function goTo(n) {
+  step = Math.max(0, Math.min(STEPS-1, n));
+  document.querySelectorAll('.section').forEach((s,i) => s.classList.toggle('active', i===step));
+  document.querySelectorAll('.stab').forEach((b,i) => {
+    b.classList.toggle('active', i===step);
+    b.classList.toggle('done', i<step);
+  });
+  // Scroll tab into view
+  const tab = document.getElementById('sb'+step);
+  tab && tab.scrollIntoView({behavior:'smooth', block:'nearest', inline:'center'});
+
+  // Bottom nav
+  const btnBack = document.getElementById('btnBack');
+  const btnNext = document.getElementById('btnNext');
+  const nav = document.getElementById('bottomNav');
+  nav.innerHTML = '';
+
+  if (step === 0) {
+    const n2 = document.createElement('button');
+    n2.className='btn-next'; n2.style.flex='1';
+    n2.textContent='Next →'; n2.onclick=goNext;
+    nav.appendChild(n2);
+  } else if (step === 6) {
+    const b = document.createElement('button');
+    b.className='btn-back'; b.textContent='← Back'; b.onclick=goBack;
+    const g2 = document.createElement('button');
+    g2.className='btn-generate-main';
+    g2.innerHTML='⬇ Generate PDF'; g2.onclick=generatePDF;
+    nav.appendChild(b); nav.appendChild(g2);
+    buildPreview();
+  } else {
+    const b = document.createElement('button');
+    b.className='btn-back'; b.textContent='← Back'; b.onclick=goBack;
+    const n2 = document.createElement('button');
+    n2.className='btn-next'; n2.textContent='Next →'; n2.onclick=goNext;
+    nav.appendChild(b); nav.appendChild(n2);
+  }
+
+  if (step===3) initChecklist();
+  document.getElementById('scrollBody').scrollTop = 0;
+}
+
+function goNext(){ goTo(step+1); }
+function goBack(){ goTo(step-1); }
+
+// ══════════════════════════════════════════════════════
+// REPORT TYPE
+// ══════════════════════════════════════════════════════
+function setType(btn, type) {
+  document.querySelectorAll('.type-chip').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  reportType = type;
+}
+
+// ══════════════════════════════════════════════════════
+// CHECKLIST
+// ══════════════════════════════════════════════════════
+const WARRANTY_COVERED = ['Engine Start / Idle','Exhaust System','Catalytic Converter','Front Bumper','Rear Bumper'];
+
+function initChecklist() {
+  const con = document.getElementById('clContainer');
+  con.innerHTML = '';
+  const isWar = reportType === 'Aftermarket Warranty Inspection';
+  CL.forEach(cat => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `<div class="card-title">${cat.title}${isWar?' <span class="badge badge-blue">C=Covered</span>':''}</div><div class="cl-grid"></div>`;
+    con.appendChild(card);
+    const grid = card.querySelector('.cl-grid');
+    cat.items.forEach(item => {
+      if (!(item in checks)) checks[item] = 'na';
+      const st = checks[item];
+      const isCov = isWar && WARRANTY_COVERED.includes(item);
+      const el = document.createElement('div');
+      el.className = 'cl-item'+(st==='pass'?' pass':st==='fail'?' fail':st==='covered'?' covered':'');
+      const cBtn = isWar ? `<button class="tgl ${st==='covered'?'c-on':''}" onclick="setChk('${item.replace(/'/g,"\\'")}','covered',event)">C</button>` : '';
+      el.innerHTML = `
+        <div class="cl-toggle">
+          <button class="tgl ${st==='pass'?'p-on':''}" onclick="setChk('${item.replace(/'/g,"\\'")}','pass',event)">P</button>
+          <button class="tgl ${st==='fail'?'f-on':''}" onclick="setChk('${item.replace(/'/g,"\\'")}','fail',event)">F</button>
+          ${cBtn}
+        </div>
+        <span class="cl-label">${item}</span>
+        ${isCov?'<span class="cl-cov-tag">covered</span>':''}`;
+      grid.appendChild(el);
+    });
+  });
+}
+
+function setChk(item, val, e) {
+  e.stopPropagation();
+  checks[item] = (checks[item]===val) ? 'na' : val;
+  initChecklist();
+}
+
+// ══════════════════════════════════════════════════════
+// MEDIA
+// ══════════════════════════════════════════════════════
+function setMTab(btn, type) {
+  document.querySelectorAll('.mtab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('photoArea').style.display = type==='photo'?'block':'none';
+  document.getElementById('videoArea').style.display = type==='video'?'block':'none';
+}
+
+function handlePhotos(files) {
+  Array.from(files).slice(0, 30-photos.length).forEach(f => {
+    const r = new FileReader();
+    r.onload = e => { photos.push({name:f.name, dataUrl:e.target.result}); renderPhotos(); };
+    r.readAsDataURL(f);
+  });
+}
+function renderPhotos() {
+  const g = document.getElementById('photoGrid');
+  g.innerHTML = '';
+  photos.forEach((p,i) => {
+    const d = document.createElement('div'); d.className='media-thumb';
+    d.innerHTML=`<img src="${p.dataUrl}"/><button class="media-rm" onclick="photos.splice(${i},1);renderPhotos()">×</button><div class="media-cap">📷 ${p.name}</div>`;
+    g.appendChild(d);
+  });
+}
+
+function handleVideos(files) {
+  Array.from(files).slice(0, 5-videos.length).forEach(f => {
+    const url = URL.createObjectURL(f);
+    const r = new FileReader();
+    r.onload = e => { videos.push({name:f.name, dataUrl:e.target.result, url}); renderVideos(); };
+    r.readAsDataURL(f);
+  });
+}
+function renderVideos() {
+  const g = document.getElementById('videoGrid');
+  g.innerHTML = '';
+  videos.forEach((v,i) => {
+    const d = document.createElement('div'); d.className='media-thumb';
+    d.innerHTML=`<video src="${v.url}" muted playsinline></video><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#00000040;font-size:1.6rem">▶️</div><button class="media-rm" onclick="videos.splice(${i},1);renderVideos()">×</button><div class="media-cap">🎥 ${v.name}</div>`;
+    g.appendChild(d);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// SIGNATURES
+// ══════════════════════════════════════════════════════
+function setupSig(id) {
+  const cv = document.getElementById(id);
+  const ctx = cv.getContext('2d');
+  let drawing = false;
+  const pos = e => {
+    const r=cv.getBoundingClientRect(), s=e.touches?e.touches[0]:e;
+    const scaleX=cv.width/r.width, scaleY=cv.height/r.height;
+    return {x:(s.clientX-r.left)*scaleX, y:(s.clientY-r.top)*scaleY};
+  };
+  const resize = () => {
+    const w = cv.parentElement.clientWidth - 2;
+    cv.width = w || 300; cv.height = 120;
+  };
+  resize();
+  new ResizeObserver(resize).observe(cv.parentElement);
+  cv.addEventListener('mousedown', e=>{drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+  cv.addEventListener('mousemove', e=>{if(!drawing)return;const p=pos(e);ctx.lineWidth=2;ctx.lineCap='round';ctx.strokeStyle='#eef0f7';ctx.lineTo(p.x,p.y);ctx.stroke();});
+  cv.addEventListener('mouseup', ()=>drawing=false);
+  cv.addEventListener('mouseleave', ()=>drawing=false);
+  cv.addEventListener('touchstart', e=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
+  cv.addEventListener('touchmove', e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.lineWidth=2;ctx.lineCap='round';ctx.strokeStyle='#eef0f7';ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});
+  cv.addEventListener('touchend', ()=>drawing=false);
+}
+function clearSig(id){const c=document.getElementById(id);c.getContext('2d').clearRect(0,0,c.width,c.height);}
+
+// ══════════════════════════════════════════════════════
+// PREVIEW
+// ══════════════════════════════════════════════════════
+const g = id => document.getElementById(id)?.value||'';
+function buildPreview() {
+  const passC=Object.values(checks).filter(v=>v==='pass').length;
+  const failC=Object.values(checks).filter(v=>v==='fail').length;
+  const covC=Object.values(checks).filter(v=>v==='covered').length;
+  const naC=Object.values(checks).filter(v=>v==='na').length;
+  const pane=document.getElementById('previewPane');
+  pane.innerHTML=`
+    <div class="card">
+      <div class="card-title">Summary</div>
+      <div class="prev-grid">
+        <div class="prev-box"><div class="prev-lbl">Type</div><div class="prev-val" style="font-size:.78rem">${reportType}</div></div>
+        <div class="prev-box"><div class="prev-lbl">Vehicle</div><div class="prev-val">${g('vYear')} ${g('vMake')} ${g('vModel')}</div></div>
+        <div class="prev-box"><div class="prev-lbl">Date</div><div class="prev-val">${g('inspDate')}</div></div>
+        <div class="prev-box"><div class="prev-lbl">Report #</div><div class="prev-val">${g('reportNum')}</div></div>
+        <div class="prev-box"><div class="prev-lbl">Customer</div><div class="prev-val">${g('customerName')||'—'}</div></div>
+        <div class="prev-box"><div class="prev-lbl">Media</div><div class="prev-val">${photos.length}📷 ${videos.length}🎥</div></div>
+        ${reportType==='Aftermarket Warranty Inspection'?`
+        <div class="prev-box"><div class="prev-lbl">Warranty Co.</div><div class="prev-val" style="font-size:.8rem">${g('warCompany')||'—'}</div></div>
+        <div class="prev-box"><div class="prev-lbl">Claim #</div><div class="prev-val" style="font-size:.8rem">${g('warClaim')||'—'}</div></div>`:''}
+      </div>
+      <div class="sum-row">
+        <div class="sb sb-pass">✓ ${passC} Pass</div>
+        <div class="sb sb-fail">✗ ${failC} Fail</div>
+        ${covC?`<div class="sb sb-cov">🛡 ${covC} Covered</div>`:''}
+        <div class="sb sb-na">— ${naC} N/A</div>
+      </div>
+    </div>`;
+}
+
+// ══════════════════════════════════════════════════════
+// TOAST + PROGRESS
+// ══════════════════════════════════════════════════════
+function toast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3500);
+}
+function setProgress(pct, lbl) {
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('progLbl').textContent=lbl;
+}
+const tick = () => new Promise(r=>setTimeout(r,30));
+
+// ══════════════════════════════════════════════════════
+// PDF GENERATION
+// ══════════════════════════════════════════════════════
+async function generatePDF() {
+  const genBtn = document.querySelector('.btn-generate-main');
+  if(genBtn){genBtn.textContent='⏳ Building...';genBtn.disabled=true;}
+  document.getElementById('progWrap').classList.add('show');
+  setProgress(5,'Initializing...'); await tick();
+
+  try {
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({unit:'pt',format:'letter'});
+    const W=612,H=792,M=36;
+    let y=0;
+    const C={bg:[11,13,18],dk:[24,28,39],gold:[201,168,76],gold2:[232,201,109],silver:[138,155,181],green:[62,207,120],red:[232,83,74],blue:[74,158,255],text:[238,240,247],muted:[107,120,150],light:[245,246,250]};
+
+    const newPage=()=>{doc.addPage();doc.setFillColor(...C.gold);doc.rect(0,0,W,5,'F');y=M+10;};
+    const needsPage=h=>{if(y+h>H-M-10){newPage();return true;}return false;};
+
+    const hdr=(txt,sub='')=>{
+      needsPage(sub?48:38);
+      doc.setFillColor(...C.bg);doc.rect(M,y,W-2*M,sub?38:28,'F');
+      doc.setFont('helvetica','bold');doc.setFontSize(12);doc.setTextColor(...C.gold);
+      doc.text(txt,M+10,y+(sub?18:20));
+      if(sub){doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(...C.muted);doc.text(sub,M+10,y+30);}
+      y+=sub?48:36;
+    };
+
+    const rowPair=(pairs)=>{
+      const cw=(W-2*M-10)/2;
+      const rc=Math.ceil(pairs.length/2);
+      needsPage(rc*22+8);
+      pairs.forEach(({k,v},i)=>{
+        const col=i%2,row=Math.floor(i/2);
+        const xi=M+col*(cw+10),yi=y+row*22;
+        doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(...C.muted);
+        doc.text(k.toUpperCase(),xi,yi+10);
+        doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(...C.text);
+        doc.text(v||'—',xi+85,yi+10);
+      });
+      y+=Math.ceil(pairs.length/2)*22+10;
+    };
+
+    // ── COVER ──────────────────────────────────────────
+    setProgress(10,'Cover page...'); await tick();
+    doc.setFillColor(...C.bg);doc.rect(0,0,W,190,'F');
+    doc.setFillColor(...C.gold);doc.rect(0,0,W,6,'F');
+
+    // Shield icon area
+    doc.setFillColor(...C.gold);doc.roundedRect(M,18,50,50,6,6,'F');
+    doc.setFontSize(26);doc.text('🛡️',M+8,55);
+
+    // Company name
+    doc.setFont('helvetica','bold');doc.setFontSize(20);doc.setTextColor(...C.gold);
+    doc.text('KNIGHTS MOBILE INSPECTION',M+65,38);
+    doc.setFontSize(8);doc.setFont('helvetica','normal');doc.setTextColor(...C.silver);
+    doc.text('PROFESSIONAL VEHICLE INSPECTION SERVICES',M+65,52);
+    doc.setDrawColor(...C.gold);doc.setLineWidth(1);doc.line(M,76,W-M,76);
+
+    doc.setFontSize(8);doc.setTextColor(...C.silver);
+    doc.text(`Report: ${g('reportNum')||'—'}`,M,92);
+    doc.text(`Date: ${g('inspDate')||'—'}`,M+130,92);
+    doc.text(`Inspector: ${g('inspectorName')||'—'}`,M+280,92);
+    doc.text(`📞 ${g('companyPhone')||''}  ✉ ${g('companyEmail')||''}`,M,107);
+    if(g('inspLocation'))doc.text(`📍 ${g('inspLocation')}`,M,121);
+
+    // Report type badge
+    doc.setFillColor(...(reportType==='Aftermarket Warranty Inspection'?C.gold:C.dk));
+    doc.roundedRect(W-M-145,18,145,24,5,5,'F');
+    doc.setFontSize(8);doc.setFont('helvetica','bold');
+    doc.setTextColor(...(reportType==='Aftermarket Warranty Inspection'?[0,0,0]:C.gold));
+    doc.text(reportType.toUpperCase(),W-M-139,34,{maxWidth:132});
+
+    y=200;
+
+    // Vehicle card
+    doc.setFillColor(...C.light);doc.roundedRect(M,y,W-2*M,144,8,8,'F');
+    doc.setFillColor(...C.dk);doc.roundedRect(M,y,70,144,8,8,'F');
+    doc.setFontSize(30);doc.text('🚗',M+8,y+80);
+
+    const vn=`${g('vYear')} ${g('vMake')} ${g('vModel')} ${g('vTrim')}`.trim()||'Vehicle';
+    doc.setFontSize(16);doc.setFont('helvetica','bold');doc.setTextColor(...C.bg);
+    doc.text(vn,M+82,y+28,{maxWidth:W-2*M-90});
+
+    const vd=[['VIN',g('vVin')],['Color',g('vColor')],['Mileage',g('odomCurrent')||g('vMileage')],['Body',g('vBody')],['Trans',g('vTrans')],['Drive',g('vDrive')],['Fuel',g('vFuel')],['Plate',`${g('vPlate')} ${g('vState')}`]];
+    doc.setFontSize(7);
+    vd.forEach(([k,v],i)=>{
+      const col=i%3,row=Math.floor(i/3);
+      const xi=M+82+col*((W-2*M-90)/3),yi=y+50+row*28;
+      doc.setFont('helvetica','normal');doc.setTextColor(...C.muted);doc.text(k.toUpperCase(),xi,yi);
+      doc.setFont('helvetica','bold');doc.setFontSize(9);doc.setTextColor(...C.bg);
+      doc.text(v||'—',xi,yi+12);doc.setFontSize(7);
+    });
+    y+=158;
+
+    // Customer + overall
+    const hw=(W-2*M-12)/2;
+    const failC2=Object.values(checks).filter(v=>v==='fail').length;
+    const passC2=Object.values(checks).filter(v=>v==='pass').length;
+    const overall=failC2===0?'PASS':'FAIL';
+
+    doc.setFillColor(...C.light);doc.roundedRect(M,y,hw,62,6,6,'F');
+    doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(...C.muted);doc.text('CUSTOMER',M+10,y+15);
+    doc.setFontSize(13);doc.setFont('helvetica','bold');doc.setTextColor(...C.bg);doc.text(g('customerName')||'—',M+10,y+32);
+    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(...C.muted);doc.text(g('customerPhone')||'',M+10,y+48);
+
+    doc.setFillColor(...C.dk);doc.roundedRect(M+hw+12,y,hw,62,6,6,'F');
+    doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(...C.silver);doc.text('OVERALL RESULT',M+hw+22,y+15);
+    doc.setFontSize(24);doc.setFont('helvetica','bold');doc.setTextColor(...(overall==='PASS'?C.green:C.red));
+    doc.text(overall,M+hw+22,y+40);
+    doc.setFontSize(9);doc.setFont('helvetica','normal');doc.setTextColor(...C.silver);
+    doc.text(`${passC2} pass  •  ${failC2} fail`,M+hw+22,y+54);
+    y+=76;
+
+    // Notes
+    const notes=g('genNotes');
+    if(notes){
+      needsPage(60);
+      doc.setFillColor(255,252,240);
+      const nl=doc.splitTextToSize(notes,W-2*M-24);
+      const nh=Math.max(36,nl.length*11+20);
+      doc.roundedRect(M,y,W-2*M,nh,5,5,'F');
+      doc.setDrawColor(...C.gold);doc.setLineWidth(2);doc.line(M,y,M,y+nh);doc.setLineWidth(.5);
+      doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.setTextColor(...C.muted);doc.text('NOTES',M+10,y+13);
+      doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60,65,80);doc.text(nl,M+10,y+25);
+      y+=nh+12;
+    }
+
+    // ── WARRANTY SECTION ──────────────────────────────
+    if(reportType==='Aftermarket Warranty Inspection'){
+      setProgress(20,'Warranty section...'); await tick();
+      needsPage(300);
+      doc.setFillColor(40,44,58);doc.roundedRect(M,y,W-2*M,26,5,5,'F');
+      doc.setDrawColor(...C.gold);doc.setLineWidth(1.5);doc.line(M,y,M,y+26);
+      doc.setFontSize(11);doc.setFont('helvetica','bold');doc.setTextColor(...C.gold);
+      doc.text('🛡️  AFTERMARKET WARRANTY INSPECTION',M+10,y+18);
+      y+=36;
+
+      hdr('WARRANTY COMPANY DETAILS');
+      rowPair([{k:'Warranty Company',v:g('warCompany')},{k:'Claim / Contract #',v:g('warClaim')},{k:'Adjuster',v:g('warAdjuster')},{k:'Warranty Phone',v:g('warPhone')},{k:'Plan Type',v:g('warPlan')}]);
+
+      y+=8;hdr('ODOMETER VERIFICATION','Mileage must be within covered range');
+      rowPair([{k:'Current Odometer',v:g('odomCurrent')+' mi'},{k:'Policy Start Mileage',v:g('odomPolicy')+' mi'},{k:'Max Covered Mileage',v:g('odomMax')+' mi'},{k:'Odometer Condition',v:g('odomCondition')},{k:'Last Service Mileage',v:g('odomLastService')+' mi'},{k:'Odometer Photo',v:g('odomPhoto')}]);
+
+      y+=8;hdr('PRIOR REPAIR HISTORY');
+      rowPair([{k:'Last Service Date',v:g('lastServiceDate')},{k:'Repair Shop',v:g('repairShop')},{k:'Last Known Repair',v:g('lastRepair')},{k:'Service Records',v:g('serviceRecords')}]);
+
+      [[g('priorIssues'),'PRIOR ISSUES / DAMAGE HISTORY'],[g('preExistingDamage'),'PRE-EXISTING DAMAGE NOTES ⚠️']].forEach(([text,lbl])=>{
+        if(!text)return;
+        needsPage(70);
+        const nl=doc.splitTextToSize(text,W-2*M-24);
+        const nh=Math.max(46,nl.length*12+20);
+        doc.setFillColor(255,252,240);doc.roundedRect(M,y,W-2*M,nh,5,5,'F');
+        doc.setDrawColor(...C.gold);doc.setLineWidth(2);doc.line(M,y,M,y+nh);doc.setLineWidth(.5);
+        doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.setTextColor(...C.muted);doc.text(lbl,M+10,y+13);
+        doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60,65,80);doc.text(nl,M+10,y+26);
+        y+=nh+12;
+      });
+    }
+
+    // ── MECHANICAL ────────────────────────────────────
+    setProgress(35,'Mechanical section...'); await tick();
+    newPage();
+    hdr('MECHANICAL INSPECTION',`${g('vYear')} ${g('vMake')} ${g('vModel')} — ${g('inspDate')}`);
+
+    const mechS=[
+      {title:'ENGINE',pairs:[{k:'Engine',v:g('engSize')},{k:'Condition',v:g('engCondition')},{k:'Idle',v:g('engIdle')},{k:'Engine Temp',v:g('engTemp')},{k:'Oil Level',v:g('oilLevel')},{k:'Oil Condition',v:g('oilColor')},{k:'Oil Pressure',v:g('oilPressure')},{k:'Coolant Level',v:g('coolantLevel')},{k:'Coolant Cond.',v:g('coolantColor')},{k:'Check Engine Light',v:g('cel')},{k:'OBD-II Scan',v:g('obdScan')},{k:'DTC Codes',v:g('dtcCodes')}],notes:g('engNotes')},
+      {title:'TRANSMISSION & DRIVETRAIN',pairs:[{k:'Trans. Fluid Level',v:g('transFluid')},{k:'Fluid Condition',v:g('transCond')},{k:'Shift Quality',v:g('shiftQuality')},{k:'CV Axles',v:g('cvAxles')},{k:'Differential',v:g('diffCond')},{k:'Transfer Case',v:g('transferCase')}],notes:g('driveNotes')},
+      {title:'BRAKES & SUSPENSION',pairs:[{k:'Front Brake Pad',v:g('brkFrontPad')},{k:'Rear Brake Pad',v:g('brkRearPad')},{k:'Front Rotor',v:g('brkFrontRotor')},{k:'Rear Rotor',v:g('brkRearRotor')},{k:'Brake Fluid',v:g('brkFluid')},{k:'Fluid Cond.',v:g('brkFluidCond')},{k:'E-Brake',v:g('eBrake')},{k:'ABS Light',v:g('absLight')},{k:'Front Shocks',v:g('shocksFront')},{k:'Rear Shocks',v:g('shocksRear')},{k:'Ball Joints',v:g('ballJoints')},{k:'Tie Rods',v:g('tieRods')}],notes:g('suspNotes')},
+      {title:'FLUIDS & BELTS',pairs:[{k:'Power Steering',v:g('psFluid')},{k:'A/C Refrigerant',v:g('acRefrig')},{k:'Timing Belt/Chain',v:g('timingBelt')},{k:'Serpentine Belt',v:g('serpBelt')},{k:'Coolant Hoses',v:g('coolantHoses')},{k:'Vacuum Lines',v:g('vacLines')}]},
+      {title:'ELECTRICAL & BATTERY',pairs:[{k:'Battery Condition',v:g('batCond')},{k:'Battery Voltage',v:g('batVoltage')},{k:'Charging Voltage',v:g('chargeVoltage')},{k:'Alternator',v:g('alternator')},{k:'Starter',v:g('starter')},{k:'Warning Lights',v:g('warningLights')}]},
+      {title:'TIRES & WHEELS',pairs:[{k:'LF Tread',v:g('tireLF')},{k:'RF Tread',v:g('tireRF')},{k:'LR Tread',v:g('tireLR')},{k:'RR Tread',v:g('tireRR')},{k:'Tire Brand/Size',v:g('tireBrand')},{k:'Tire Condition',v:g('tireCond')},{k:'Wheel Condition',v:g('wheelCond')},{k:'Spare Tire',v:g('spareTire')}]},
+    ];
+
+    for(const ms of mechS){
+      const nh=36+Math.ceil(ms.pairs.length/2)*22+(ms.notes?50:0)+14;
+      needsPage(nh);
+      hdr(ms.title);
+      rowPair(ms.pairs);
+      if(ms.notes){
+        needsPage(48);
+        const nl=doc.splitTextToSize(ms.notes,W-2*M-20);
+        const h2=Math.max(32,nl.length*11+16);
+        doc.setFillColor(...C.light);doc.roundedRect(M,y,W-2*M,h2,4,4,'F');
+        doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(...C.muted);doc.text('NOTES',M+8,y+11);
+        doc.setFont('helvetica','normal');doc.setFontSize(8.5);doc.setTextColor(60,65,80);doc.text(nl,M+8,y+23);
+        y+=h2+12;
+      }
+      y+=8;
+    }
+
+    // ── CHECKLIST ─────────────────────────────────────
+    setProgress(55,'Checklist...'); await tick();
+    newPage();
+    const passC3=Object.values(checks).filter(v=>v==='pass').length;
+    const failC3=Object.values(checks).filter(v=>v==='fail').length;
+    const covC3=Object.values(checks).filter(v=>v==='covered').length;
+    hdr('INSPECTION CHECKLIST',`${passC3} pass · ${failC3} fail · ${covC3} covered`);
+
+    for(const cat of CL){
+      const rows=Math.ceil(cat.items.length/2);
+      needsPage(26+rows*19+10);
+      doc.setFillColor(...C.dk);doc.roundedRect(M,y,W-2*M,20,4,4,'F');
+      doc.setFontSize(8.5);doc.setFont('helvetica','bold');doc.setTextColor(...C.gold);
+      doc.text(cat.title.toUpperCase(),M+8,y+14);
+      y+=26;
+      const cw=(W-2*M-8)/2;
+      cat.items.forEach((item,i)=>{
+        const col=i%2,row=Math.floor(i/2);
+        const xi=M+col*(cw+8),yi=y+row*19;
+        needsPage(0);
+        const st=checks[item]||'na';
+        const bgC=st==='pass'?[240,255,248]:st==='fail'?[255,243,242]:st==='covered'?[240,248,255]:[248,249,251];
+        const dotC=st==='pass'?C.green:st==='fail'?C.red:st==='covered'?C.blue:C.muted;
+        doc.setFillColor(...bgC);doc.roundedRect(xi,yi,cw,16,3,3,'F');
+        doc.setFillColor(...dotC);doc.circle(xi+8,yi+8,3.2,'F');
+        doc.setFontSize(6);doc.setFont('helvetica','bold');doc.setTextColor(...dotC);
+        doc.text(st==='covered'?'COV':st.toUpperCase(),xi+13,yi+11);
+        doc.setFontSize(7.5);doc.setFont('helvetica','normal');doc.setTextColor(50,55,70);
+        doc.text(item,xi+36,yi+11);
+      });
+      y+=rows*19+10;
+    }
+
+    // ── PHOTOS ────────────────────────────────────────
+    if(photos.length>0){
+      setProgress(70,'Embedding photos...'); await tick();
+      newPage();
+      hdr('PHOTO DOCUMENTATION',`${photos.length} inspection photos`);
+      const pw=(W-2*M-12)/2, ph=pw*0.65;
+      for(let i=0;i<photos.length;i++){
+        const col=i%2;
+        if(col===0&&i>0)y+=ph+28;
+        if(y+ph>H-M-10)newPage();
+        const xi=M+col*(pw+12);
+        try{
+          const fmt=photos[i].dataUrl.includes('image/png')?'PNG':'JPEG';
+          doc.addImage(photos[i].dataUrl,fmt,xi,y,pw,ph,undefined,'FAST');
+        }catch(e){
+          doc.setFillColor(...C.light);doc.rect(xi,y,pw,ph,'F');
+          doc.setTextColor(...C.muted);doc.setFontSize(9);doc.text('Image error',xi+pw/2,y+ph/2,{align:'center'});
+        }
+        doc.setFillColor(0,0,0);doc.rect(xi,y+ph-16,pw,16,'F');
+        doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.setTextColor(240,242,248);
+        doc.text(`${i+1}: ${photos[i].name.slice(0,55)}`,xi+4,y+ph-5);
+        doc.setDrawColor(220,222,228);doc.setLineWidth(.4);doc.rect(xi,y,pw,ph,'S');
+      }
+      y+=ph+12;
+    }
+
+    // ── VIDEOS ────────────────────────────────────────
+    if(videos.length>0){
+      needsPage(50+videos.length*26);
+      y+=10;hdr('VIDEO DOCUMENTATION',`${videos.length} video clips`);
+      videos.forEach((v,i)=>{
+        needsPage(28);
+        doc.setFillColor(240,248,255);doc.roundedRect(M,y,W-2*M,20,4,4,'F');
+        doc.setFontSize(9.5);doc.text('🎥',M+8,y+14);
+        doc.setFont('helvetica','bold');doc.setFontSize(8.5);doc.setTextColor(40,50,80);
+        doc.text(`Video ${i+1}: ${v.name}`,M+26,y+14);
+        y+=26;
+      });
+    }
+
+    // ── SIGNATURES ────────────────────────────────────
+    setProgress(88,'Signatures...'); await tick();
+    newPage();
+    hdr('CERTIFICATION & SIGNATURES');
+
+    // Disclaimer
+    needsPage(58);
+    doc.setFillColor(255,253,240);doc.roundedRect(M,y,W-2*M,50,5,5,'F');
+    doc.setDrawColor(...C.gold);doc.setLineWidth(2);doc.line(M,y,M,y+50);doc.setLineWidth(.5);
+    doc.setFontSize(8);doc.setFont('helvetica','bold');doc.setTextColor(60,65,40);doc.text('Certification Statement',M+10,y+14);
+    doc.setFont('helvetica','normal');doc.setFontSize(7.5);doc.setTextColor(80,85,60);
+    const disc='This report reflects the physical condition of the vehicle as observed at the time of inspection by Knights Mobile Inspection. It does not constitute a warranty or guarantee of future performance. The inspector certifies this report to be accurate and complete to the best of their professional knowledge.';
+    doc.text(doc.splitTextToSize(disc,W-2*M-22),M+10,y+26);
+    y+=60;
+
+    // Sig blocks
+    needsPage(106);
+    const sw=(W-2*M-20)/2;
+    const drawSig=(cvId,label,name,xi,yi)=>{
+      doc.setFillColor(...C.light);doc.roundedRect(xi,yi,sw,94,6,6,'F');
+      doc.setFontSize(7);doc.setFont('helvetica','bold');doc.setTextColor(...C.muted);doc.text(label,xi+10,yi+15);
+      const cv=document.getElementById(cvId);
+      const ctx=cv.getContext('2d');
+      const px=ctx.getImageData(0,0,cv.width,cv.height).data;
+      const hasSig=Array.from(px).some((v,i)=>i%4===3&&v>0);
+      if(hasSig){try{doc.addImage(cv.toDataURL('image/png'),'PNG',xi+6,yi+20,sw-12,52);}catch(e){}}
+      else{doc.setDrawColor(180,185,200);doc.setLineDash([3,3]);doc.line(xi+14,yi+66,xi+sw-14,yi+66);doc.setLineDash([]);doc.setFontSize(8);doc.setTextColor(...C.muted);doc.text('No signature',xi+sw/2,yi+60,{align:'center'});}
+      doc.setFontSize(9);doc.setFont('helvetica','bold');doc.setTextColor(50,55,70);doc.text(name||'—',xi+10,yi+84);
+    };
+    drawSig('sigCanvas','INSPECTOR SIGNATURE',g('inspectorName'),M,y);
+    drawSig('custSigCanvas','CUSTOMER SIGNATURE',g('customerName'),M+sw+20,y);
+    y+=106;
+
+    // ── PAGE NUMBERS + FOOTER ─────────────────────────
+    setProgress(96,'Finalizing...'); await tick();
+    const total=doc.getNumberOfPages();
+    for(let p=1;p<=total;p++){
+      doc.setPage(p);
+      doc.setFillColor(...C.bg);doc.rect(0,H-36,W,36,'F');
+      doc.setFillColor(...C.gold);doc.rect(0,H-38,W,2,'F');
+      doc.setFontSize(7);doc.setFont('helvetica','normal');doc.setTextColor(130,140,165);
+      doc.text(`Knights Mobile Inspection  ·  ${g('companyPhone')||''}  ·  ${g('companyEmail')||''}`,W/2,H-20,{align:'center'});
+      doc.text(`Report ${g('reportNum')||''}  ·  ${g('inspDate')||''}  ·  Page ${p} of ${total}`,W/2,H-8,{align:'center'});
+    }
+
+    setProgress(100,'Done!'); await tick();
+    const fname=`KMI_${(g('vYear')+g('vMake')+g('vModel')).replace(/\s+/g,'_')||'report'}_${g('reportNum')||Date.now()}.pdf`;
+    doc.save(fname);
+    toast('✓ PDF downloaded!');
+
+  } catch(err) {
+    console.error(err);
+    alert('PDF error: '+err.message);
+  }
+
+  const gb=document.querySelector('.btn-generate-main');
+  if(gb){gb.innerHTML='⬇ Generate PDF';gb.disabled=false;}
+  setTimeout(()=>document.getElementById('progWrap').classList.remove('show'),2500);
+}
+
+// ══════════════════════════════════════════════════════
+// PWA INSTALL
+// ══════════════════════════════════════════════════════
+function initPWA() {
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+
+  // iOS detection
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+
+  if (isStandalone) return; // Already installed
+
+  if (isIOS) {
+    // Show iOS tip after 3 seconds
+    setTimeout(() => {
+      document.getElementById('iosTip').classList.add('show');
+    }, 3000);
+    return;
+  }
+
+  // Android / Chrome - listen for beforeinstallprompt
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    document.getElementById('installBanner').classList.add('show');
+  });
+
+  document.getElementById('installBtn').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    document.getElementById('installBanner').classList.remove('show');
+    if (outcome === 'accepted') toast('🛡️ App installed!');
+  });
+}
+
+// ══════════════════════════════════════════════════════
+// NEW REPORT / RESET
+// ══════════════════════════════════════════════════════
+function confirmNewReport() {
+  document.getElementById('newReportModal').classList.add('show');
+}
+
+function resetAll() {
+  // Close modal
+  document.getElementById('newReportModal').classList.remove('show');
+
+  // Clear all text inputs, selects, textareas
+  document.querySelectorAll('input, select, textarea').forEach(el => {
+    if (el.type === 'date') el.value = '';
+    else el.value = '';
+  });
+
+  // Reset report type
+  reportType = 'Pre-Purchase Inspection';
+  document.querySelectorAll('.type-chip').forEach((b,i) => b.classList.toggle('active', i===0));
+
+  // Clear photos & videos
+  photos = [];
+  videos = [];
+  renderPhotos();
+  renderVideos();
+
+  // Clear checklist
+  checks = {};
+
+  // Clear signatures
+  clearSig('sigCanvas');
+  clearSig('custSigCanvas');
+
+  // Reset date and report number
+  document.getElementById('inspDate').value = new Date().toISOString().split('T')[0];
+  document.getElementById('reportNum').value = 'KMI-' + Date.now().toString().slice(-5);
+
+  // Go back to step 1
+  goTo(0);
+
+  toast('✓ Ready for new report!');
+}
+</script>
+</body>
+</html>
