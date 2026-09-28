@@ -1,0 +1,688 @@
+--- a/index.html
++++ b/index.html
+@@ -14,19 +14,19 @@
+       odometer:  g('rpt-odometer'),  color:      g('rpt-color'),
+       plate:     g('rpt-plate'),     date:       g('rpt-date'),
+       exterior: {
+-        hood:g('rpt-exthhood'),roof:g('rpt-extroof'),frontbumper:g('rpt-extfrontbumper'),
+-        rearbumper:g('rpt-extrearbumper'),driverdoor:g('rpt-extdriverdoor'),
+-        passengerdoor:g('rpt-extpassengerdoor'),reardoor:g('rpt-extreardoor'),
+-        trunk:g('rpt-exttrunk'),windshield:g('rpt-extwindshield'),
+-        glass:g('rpt-extallglass'),paint:g('rpt-extpaintoverall'),frame:g('rpt-extframeundercarriage'),
++        hood:g('rpt-ext-hood'),roof:g('rpt-ext-roof'),frontbumper:g('rpt-ext-frontbumper'),
++        rearbumper:g('rpt-ext-rearbumper'),driverdoor:g('rpt-ext-driverdoor'),
++        passengerdoor:g('rpt-ext-passengerdoor'),reardoor:g('rpt-ext-reardoors'),
++        trunk:g('rpt-ext-trunkliftgate'),windshield:g('rpt-ext-windshield'),
++        glass:g('rpt-ext-allglass'),paint:g('rpt-ext-paintoverall'),frame:g('rpt-ext-frameundercarriage'),
+         notes:g('rpt-ext-notes')
+       },
+       engine: {
+-        start:g('rpt-engenginestart'),noise:g('rpt-engenginenoise'),oil:g('rpt-engoilcondition'),
+-        coolant:g('rpt-engcoolantlevel'),brake_fluid:g('rpt-engbrakefluid'),
+-        ps_fluid:g('rpt-engpowersteering'),battery:g('rpt-engbatterycondition'),
+-        belts:g('rpt-engbeltshoses'),air:g('rpt-engairfilter'),
+-        trans:g('rpt-engtransmission'),exhaust:g('rpt-engexhaustsystem'),suspension:g('rpt-engsuspension'),
++        start:g('rpt-eng-enginestart'),noise:g('rpt-eng-enginenoise'),oil:g('rpt-eng-oilcondition'),
++        coolant:g('rpt-eng-coolantlevel'),brake_fluid:g('rpt-eng-brakefluid'),
++        ps_fluid:g('rpt-eng-powersteeringfluid'),battery:g('rpt-eng-batterycondition'),
++        belts:g('rpt-eng-beltshoses'),air:g('rpt-eng-airfilter'),
++        trans:g('rpt-eng-transmission'),exhaust:g('rpt-eng-exhaustsystem'),suspension:g('rpt-eng-suspension'),
+         notes:g('rpt-eng-notes')
+       },
+       tires: {
+@@ -37,10 +37,10 @@
+         notes:g('rpt-tire-notes')
+       },
+       interior: {
+-        dash:g('rpt-intdashboardlights'),ac:g('rpt-intacheat'),windows:g('rpt-intwindowsswitches'),
+-        seats:g('rpt-intseatsbelt'),horn:g('rpt-inthorn'),wipers:g('rpt-intwipers'),
+-        headlights:g('rpt-intheadlights'),taillights:g('rpt-inttaillights'),
+-        radio:g('rpt-intradioinfotainment'),sunroof:g('rpt-intsunroofmoonroof'),
++        dash:g('rpt-int-dashboardlights'),ac:g('rpt-int-acheat'),windows:g('rpt-int-windowsswitches'),
++        seats:g('rpt-int-seatsbelts'),horn:g('rpt-int-horn'),wipers:g('rpt-int-wipers'),
++        headlights:g('rpt-int-headlights'),taillights:g('rpt-int-taillights'),
++        radio:g('rpt-int-radioinfotainment'),sunroof:g('rpt-int-sunroofmoonroof'),
+         notes:g('rpt-int-notes')
+       },
+       roadtest:   g('rpt-roadtest'),  drive: g('rpt-drive'),  road_notes: g('rpt-road-notes'),
+@@ -53,7 +53,8 @@
+       photo_count:    (typeof _rptPhotos !== 'undefined') ? _rptPhotos.length : 0,
+       video_count:    (typeof _rptVideos !== 'undefined') ? _rptVideos.length : 0,
+       photo_labels:   (typeof _rptPhotos !== 'undefined') ? _rptPhotos.map(function(p){return p.label||p.name;}).join(', ') : '',
+-      video_labels:   (typeof _rptVideos !== 'undefined') ? _rptVideos.map(function(v){return v.label||v.name;}).join(', ') : ''
++      video_labels:   (typeof _rptVideos !== 'undefined') ? _rptVideos.map(function(v){return v.label||v.name;}).join(', ') : '',
++      section_status: getSecStatus('rpt')
+     };
+   }
+ 
+@@ -62,7 +63,192 @@
+                  F:'<span style="background:#f39c12;color:#000;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">FAIR</span>',
+                  P:'<span style="background:#e74c3c;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;">POOR</span>',
+                  NA:'<span style="background:#555;color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;">N/A</span>'};
+-    return map[v] || v;
++    return map[v] || v || '<span style="color:var(--gray);font-size:11px;">— not rated</span>';
++  }
++
++  // ── SECTION STATUS (Inspected / Limited / Not inspected) + PRE-SUBMIT REVIEW ──
++  const SEC_STATUS_LABEL = { inspected:'Inspected', limited:'Limited', not:'Not Inspected' };
++  const SEC_DEFS = {
++    rpt: { exterior:'Exterior & Body', engine:'Engine & Mechanical', tires:'Tires & Brakes', interior:'Interior' },
++    w:   { engine:'Engine', fluids:'Fluids', condition:'Condition of Vehicle' }
++  };
++  const _secStatus = { rpt:{}, w:{} };
++
++  function escHtml(s) {
++    return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
++  }
++
++  function renderSecSlots() { document.querySelectorAll('.ss-slot').forEach(renderSecSlot); }
++
++  function renderSecSlot(slot) {
++    const form = slot.dataset.form, sec = slot.dataset.sec;
++    const ss = _secStatus[form][sec] || {status:'', note:''};
++    const btn = (val, label, bg, fg) => {
++      const on = ss.status === val;
++      return `<button type="button" onclick="setSecStatus('${form}','${sec}','${val}')" style="padding:6px 12px;font-size:12px;font-weight:700;border-radius:4px;cursor:pointer;border:1px solid ${on?bg:'var(--border)'};background:${on?bg:'var(--steel)'};color:${on?fg:'var(--gray)'};">${label}</button>`;
++    };
++    const needs = (ss.status==='limited' || ss.status==='not') && !ss.note.trim();
++    const ph = ss.status==='not' ? 'Reason not inspected (required) — e.g. no clearance, wet ground'
++             : ss.status==='limited' ? 'What limited it (required) — e.g. undercarriage viewed from ground only'
++             : 'Section note (optional)';
++    slot.innerHTML = `
++      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:.6rem;">
++        <span style="font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:1px;margin-right:4px;">Section status</span>
++        ${btn('inspected','✓ Inspected','var(--green)','#000')}
++        ${btn('limited','◐ Limited','var(--gold)','#000')}
++        ${btn('not','✕ Not inspected','var(--red)','#fff')}
++      </div>
++      ${ss.status ? `<input type="text" class="form-input ss-note" style="margin-bottom:1rem;${needs?'border-color:var(--red);':''}" placeholder="${ph}" value="${escHtml(ss.note)}" oninput="setSecNote('${form}','${sec}',this)">` : '<div style="margin-bottom:.6rem;"></div>'}`;
++    // Dim the section's fields when it's marked Not inspected
++    Array.from(slot.parentElement.children).forEach(el => { if (el !== slot) el.style.opacity = ss.status==='not' ? '.4' : ''; });
++  }
++
++  function setSecStatus(form, sec, val) {
++    const cur = _secStatus[form][sec] || {status:'', note:''};
++    cur.status = (cur.status === val) ? '' : val;   // tap again to clear
++    _secStatus[form][sec] = cur;
++    document.querySelectorAll(`.ss-slot[data-form="${form}"][data-sec="${sec}"]`).forEach(renderSecSlot);
++  }
++
++  // Update the note without re-rendering so typing isn't interrupted
++  function setSecNote(form, sec, el) {
++    const cur = _secStatus[form][sec] || {status:'', note:''};
++    cur.note = el.value;
++    _secStatus[form][sec] = cur;
++    el.style.borderColor = ((cur.status==='limited'||cur.status==='not') && !cur.note.trim()) ? 'var(--red)' : '';
++  }
++
++  function getSecStatus(form) {
++    const out = {};
++    Object.keys(SEC_DEFS[form]).forEach(k => {
++      const ss = _secStatus[form][k] || {status:'', note:''};
++      out[k] = { status: ss.status, note: ss.note.trim() };
++    });
++    return out;
++  }
++
++  // Counts the rated fields inside a section: selects, radio groups, and tread-depth inputs
++  function secFieldStats(form, sec) {
++    const slot = document.querySelector(`.ss-slot[data-form="${form}"][data-sec="${sec}"]`);
++    const stats = { total:0, filled:0, na:0, results:0 };
++    if (!slot) return stats;
++    const box = slot.parentElement;
++    const isNA = v => v==='NA' || v==='N/A';
++    box.querySelectorAll('select').forEach(el => {
++      stats.total++;
++      if (el.value !== '') { stats.filled++; if (isNA(el.value)) stats.na++; else stats.results++; }
++    });
++    box.querySelectorAll('input[type="text"][id*="tread"]').forEach(el => {
++      stats.total++;
++      if (el.value.trim()) { stats.filled++; stats.results++; }
++    });
++    const radioNames = new Set(Array.from(box.querySelectorAll('input[type="radio"]')).map(r => r.name));
++    radioNames.forEach(name => {
++      stats.total++;
++      const c = box.querySelector(`input[type="radio"][name="${name}"]:checked`);
++      if (c) { stats.filled++; if (isNA(c.value)) stats.na++; else stats.results++; }
++    });
++    return stats;
++  }
++
++  function reviewSections(form) {
++    const issues = [];
++    Object.entries(SEC_DEFS[form]).forEach(([sec, title]) => {
++      const ss = _secStatus[form][sec] || {status:'', note:''};
++      const st = secFieldStats(form, sec);
++      const unrated = st.total - st.filled;
++      if (!ss.status) {
++        issues.push({level:'err', msg:`${title}: pick a section status (Inspected, Limited, or Not inspected).`});
++      } else if (ss.status === 'inspected') {
++        if (st.filled === 0) issues.push({level:'err', msg:`${title}: marked Inspected but nothing is rated.`});
++        else if (unrated > 0) issues.push({level:'err', msg:`${title}: ${unrated} item${unrated>1?'s':''} not rated — rate ${unrated>1?'them':'it'} or mark the section Limited.`});
++        if (st.na > 0) issues.push({level:'warn', msg:`${title}: ${st.na} item${st.na>1?'s':''} marked N/A. If you couldn't check ${st.na>1?'them':'it'}, mark the section Limited and say why.`});
++      } else {
++        if (!ss.note.trim()) issues.push({level:'err', msg:`${title}: marked ${SEC_STATUS_LABEL[ss.status]} — add the reason.`});
++        if (ss.status === 'not' && st.results > 0) issues.push({level:'err', msg:`${title}: marked Not inspected but ${st.results} item${st.results>1?'s have':' has'} a rating. Clear them or change the status.`});
++      }
++    });
++    return issues;
++  }
++
++  function reviewInspectionReport(r) {
++    const issues = reviewSections('rpt');
++    const add = (level, msg) => issues.push({level, msg});
++    if (!r.vehicle.trim()) add('err', 'Year / Make / Model is blank.');
++    if (!r.vin.trim()) add('err', 'VIN is blank.');
++    else if (r.vin.trim().length !== 17) add('warn', `VIN is ${r.vin.trim().length} characters — standard VINs are 17.`);
++    if (!r.odometer.trim()) add('err', 'Odometer is blank.');
++    if (!r.date) add('warn', 'Inspection date is blank.');
++    if (!r.roadtest) add('err', 'Road Test: answer "Road Test Performed?".');
++    else if (r.roadtest !== 'Yes' && !r.road_notes.trim()) add('err', `Road Test: marked ${r.roadtest} — explain why in Road Test Notes.`);
++    else if (r.roadtest === 'Yes' && !r.drive) add('err', 'Road Test: Overall Drive Quality is not rated.');
++    else if (r.roadtest === 'Yes' && r.drive === 'NA') add('warn', 'Road Test: marked performed but Drive Quality is N/A.');
++    if (!r.verdict) add('err', "Inspector's Verdict is not selected.");
++    if (!r.summary.trim()) add('err', 'Summary for the customer is blank.');
++    if (!r.customer_email) add('err', 'Customer email is blank — admin needs it to send the report.');
++    if (r.photo_count === 0) add('err', 'No photos uploaded.');
++    else {
++      const labels = (typeof _rptPhotos !== 'undefined' ? _rptPhotos : []).map(p => (p.label||'').toLowerCase());
++      const extSt = (r.section_status.exterior||{}).status;
++      if (extSt === 'inspected' && !labels.some(l => /under|frame/.test(l)))
++        add('warn', 'No photo is labeled undercarriage/frame. Add one, or mark Exterior as Limited.');
++      if (!labels.some(l => l.includes('vin'))) add('warn', 'No photo is labeled VIN.');
++      if (!labels.some(l => /odometer|mileage/.test(l))) add('warn', 'No photo is labeled odometer.');
++    }
++    return issues;
++  }
++
++  function reviewCardHtml(issues) {
++    const errs = issues.filter(i => i.level==='err').length;
++    const body = issues.length === 0
++      ? `<div style="color:var(--green);font-weight:700;font-size:13px;">✓ No gaps found. Give it a final read before submitting.</div>`
++      : issues.map(i => `<div style="font-size:12px;padding:6px 10px;margin-bottom:5px;border-radius:4px;border:1px solid ${i.level==='err'?'var(--red)':'var(--gold)'};background:${i.level==='err'?'rgba(231,76,60,.1)':'rgba(201,162,39,.1)'};">${i.level==='err'?'⛔':'⚠️'} ${escHtml(i.msg)}</div>`).join('');
++    return `
++      <div style="background:var(--steel);border-radius:6px;padding:1rem;margin-bottom:1rem;border:1px solid ${errs?'var(--red)':'var(--border)'};">
++        <div style="font-weight:700;color:var(--gold);margin-bottom:.5rem;">REPORT REVIEW ${errs?`<span style="color:var(--red);font-size:12px;">— ${errs} to fix before submitting</span>`:''}</div>
++        ${body}
++      </div>`;
++  }
++
++  // Shown on the preview, admin view and customer view when any section wasn't fully inspected
++  function scopeBlockHtml(sectionStatus, form, roadtest, roadNotes) {
++    const defs = SEC_DEFS[form] || {};
++    const lines = [];
++    Object.entries(sectionStatus || {}).forEach(([k, ss]) => {
++      if (ss && (ss.status === 'limited' || ss.status === 'not'))
++        lines.push(`<li><strong>${escHtml(defs[k]||k)}</strong> — ${SEC_STATUS_LABEL[ss.status]}${ss.note?': '+escHtml(ss.note):''}</li>`);
++    });
++    if (roadtest === 'No' || roadtest === 'Limited')
++      lines.push(`<li><strong>Road Test</strong> — ${roadtest==='No'?'Not Performed':'Limited'}${roadNotes?': '+escHtml(roadNotes):''}</li>`);
++    if (!lines.length) return '';
++    return `
++      <div style="border:1px solid var(--red);border-left:4px solid var(--red);background:rgba(231,76,60,.08);border-radius:6px;padding:.9rem 1rem;margin-bottom:1rem;">
++        <div style="font-weight:700;color:var(--red);margin-bottom:.4rem;">SCOPE LIMITATIONS</div>
++        <ul style="margin:0 0 .5rem 1.1rem;padding:0;font-size:12px;line-height:1.7;">${lines.join('')}</ul>
++        <div style="font-size:11px;color:var(--gray);">Components in these areas were not fully evaluated. No representation is made about their condition.</div>
++      </div>`;
++  }
++
++  function scopeText(sectionStatus, form, roadtest, roadNotes) {
++    const defs = SEC_DEFS[form] || {};
++    const parts = [];
++    Object.entries(sectionStatus || {}).forEach(([k, ss]) => {
++      if (ss && (ss.status === 'limited' || ss.status === 'not'))
++        parts.push((defs[k]||k) + ' — ' + SEC_STATUS_LABEL[ss.status] + (ss.note ? ' (' + ss.note + ')' : ''));
++    });
++    if (roadtest === 'No' || roadtest === 'Limited')
++      parts.push('Road Test — ' + (roadtest==='No'?'Not Performed':'Limited') + (roadNotes ? ' (' + roadNotes + ')' : ''));
++    return parts.length ? ' | SCOPE LIMITATIONS: ' + parts.join('; ') + '. Components in these areas were not fully evaluated.' : '';
++  }
++
++  function sectionStatusRowHtml(sectionStatus, form) {
++    const defs = SEC_DEFS[form] || {};
++    const col = {inspected:'var(--green)', limited:'var(--gold)', not:'var(--red)'};
++    const chips = Object.entries(defs).map(([k, title]) => {
++      const st = (sectionStatus && sectionStatus[k] && sectionStatus[k].status) || '';
++      return `<span style="display:inline-block;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;margin:0 6px 6px 0;border:1px solid ${col[st]||'var(--border)'};color:${col[st]||'var(--gray)'};">${escHtml(title)}: ${st?SEC_STATUS_LABEL[st]:'—'}</span>`;
++    }).join('');
++    return `<div style="margin-bottom:.8rem;">${chips}</div>`;
+   }
+ 
+   function previewReport() {
+@@ -74,7 +260,9 @@
+       <tr><td style="padding:5px 8px;color:var(--gray);width:50%;">${label}</td>
+           <td style="padding:5px 8px;">${ratingBadge(obj[key])}</td></tr>`).join('');
+ 
+-    document.getElementById('report-preview-body').innerHTML = `
++    document.getElementById('report-preview-body').innerHTML = reviewCardHtml(reviewInspectionReport(r)) + `
++      ${sectionStatusRowHtml(r.section_status, 'rpt')}
++      ${scopeBlockHtml(r.section_status, 'rpt', r.roadtest, r.road_notes)}
+       <div style="background:var(--steel);border-radius:6px;padding:1rem;margin-bottom:1rem;">
+         <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;margin-bottom:.3rem;">Knights Auto Mobile Inspection</div>
+         <div style="font-size:13px;color:var(--gray);">Inspector: James Ward &nbsp;·&nbsp; Date: ${r.date||'—'}</div>
+@@ -139,9 +327,11 @@
+   }
+ 
+   async function submitReport() {
++    const r = collectReport();
++    const reviewErrs = reviewInspectionReport(r).filter(i => i.level==='err');
++    if (reviewErrs.length && !confirm(`This report has ${reviewErrs.length} issue${reviewErrs.length>1?'s':''} to fix:\n\n${reviewErrs.map(i=>'• '+i.msg).join('\n')}\n\nSubmit to admin anyway?`)) return;
+     const btn = document.getElementById('submit-report-btn');
+     if(btn){btn.textContent='Submitting…';btn.disabled=true;}
+-    const r = collectReport();
+     try {
+       const {error} = await db.from('inspection_reports').insert([{
+         vehicle: r.vehicle, vin: r.vin, odometer: r.odometer,
+@@ -418,6 +608,7 @@
+   function collectWarranty() {
+     return {
+       type: 'warranty',
++      section_status: getSecStatus('w'),
+       company:        getVal('w-company'),
+       claim_num:      getVal('w-claim-num'),
+       adjuster_name:  getVal('w-adjuster-name'),
+@@ -503,9 +694,37 @@
+     return `<tr><td style="padding:5px 8px;color:var(--gray);">${label}</td><td style="padding:5px 8px;">${level}</td><td style="padding:5px 8px;">${cond}</td><td style="padding:5px 8px;${leakStyle}">${leak}</td></tr>`;
+   }
+ 
++  function reviewWarrantyReport(w) {
++    const issues = reviewSections('w');
++    const add = (level, msg) => issues.push({level, msg});
++    const blank = v => !v || v === '—' || !String(v).trim();
++    if (blank(w.company)) add('err', 'Warranty company is blank.');
++    if (blank(w.claim_num)) add('err', 'Claim number is blank.');
++    if (blank(w.vin)) add('err', 'VIN is blank.');
++    else if (w.vin.trim().length !== 17) add('warn', `VIN is ${w.vin.trim().length} characters — standard VINs are 17.`);
++    if (blank(w.mileage)) add('err', 'Mileage is blank.');
++    if (blank(w.insp_date)) add('warn', 'Inspection date is blank.');
++    if (w.cel === 'Yes' && blank(w.fault_codes)) add('err', 'Check engine light is on but no fault codes are listed.');
++    if (blank(w.roadtest)) add('err', 'Road Test: answer whether a road test was performed.');
++    else if (w.roadtest === 'No' && blank(w.road_notes)) add('err', 'Road Test: marked No — explain why in Road Test Notes.');
++    if (blank(w.component)) add('err', 'Findings: Component Being Claimed is blank.');
++    if (blank(w.cause)) add('err', 'Findings: Suspected Cause of Failure is blank.');
++    if (blank(w.observations)) add('err', 'Findings: Inspector Observations is blank.');
++    if (blank(w.repair_opinion)) add('warn', "Findings: Inspector's Repair Opinion is blank.");
++    const donePhotos = (w.photos||[]).filter(p => p.checked && p.label).length;
++    if (donePhotos < 25) add('err', `Photos: ${25-donePhotos} of the 25 required photos are not checked off with a label.`);
++    const condSt = (w.section_status.condition||{}).status;
++    const labels = (w.photos||[]).map(p => (p.label||'').toLowerCase()).concat((w.uploaded_photos||[]).map(p => (p.label||'').toLowerCase()));
++    if (condSt === 'inspected' && !labels.some(l => /under|frame/.test(l)))
++      add('warn', 'No photo is labeled undercarriage/frame. Add one, or mark Condition of Vehicle as Limited.');
++    return issues;
++  }
++
+   function previewWarranty() {
+     const w = collectWarranty();
+-    document.getElementById('warranty-preview-body').innerHTML = `
++    document.getElementById('warranty-preview-body').innerHTML = reviewCardHtml(reviewWarrantyReport(w)) + `
++      ${sectionStatusRowHtml(w.section_status, 'w')}
++      ${scopeBlockHtml(w.section_status, 'w', w.roadtest, w.road_notes)}
+       <div style="background:var(--steel);border-radius:6px;padding:1rem;margin-bottom:1rem;">
+         <div style="font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:2px;">Knights Auto — Warranty Inspection Report</div>
+         <div style="font-size:12px;color:var(--gray);">Inspector: James Ward &nbsp;·&nbsp; Date: ${w.insp_date}</div>
+@@ -670,6 +889,8 @@
+       (document.getElementById('w-photo-cb-'+i)?.checked && document.getElementById('w-photo-label-'+i)?.value?.trim())
+     ).filter(Boolean).length;
+     if(donePhotos < 25) { showToast('⚠️ Please complete all 25 photos with labels before submitting.'); return; }
++    const wReviewErrs = reviewWarrantyReport(collectWarranty()).filter(i => i.level==='err');
++    if (wReviewErrs.length && !confirm(`This report has ${wReviewErrs.length} issue${wReviewErrs.length>1?'s':''} to fix:\n\n${wReviewErrs.map(i=>'• '+i.msg).join('\n')}\n\nSubmit to admin anyway?`)) return;
+     const btn = document.getElementById('submit-warranty-btn');
+     if(btn){btn.textContent='Submitting…';btn.disabled=true;}
+     const w = collectWarranty();
+@@ -813,6 +1034,8 @@
+         </div>
+       </div>
+ 
++      ${rpt.section_status ? sectionStatusRowHtml(rpt.section_status, 'rpt') : '<div style="font-size:11px;color:var(--gray);margin-bottom:.8rem;">Section status not recorded (report submitted before this feature).</div>'}
++      ${scopeBlockHtml(rpt.section_status, 'rpt', rpt.roadtest, rpt.road_notes)}
+       <div style="font-weight:700;color:var(--gold);margin-bottom:.4rem;">EXTERIOR</div>
+       <table style="width:100%;border-collapse:collapse;background:var(--steel);border-radius:6px;overflow:hidden;margin-bottom:1rem;">
+         ${Object.entries(rpt.exterior||{}).filter(([k])=>k!=='notes').map(([k,v])=>`<tr><td style="padding:5px 10px;color:var(--gray);width:50%;text-transform:capitalize;">${k.replace(/([A-Z])/g,' $1')}</td><td style="padding:5px 10px;">${rb(v)}</td></tr>`).join('')}
+@@ -886,6 +1109,7 @@
+         message: 'Hi ' + custName + ', your inspection report for ' + (data.vehicle||'your vehicle') +
+                  ' is ready. Verdict: ' + (data.verdict||'—') +
+                  '. Summary: ' + (data.summary||'Please contact us for details.') +
++                 scopeText(rpt.section_status, 'rpt', rpt.roadtest, rpt.road_notes) +
+                  ' — Knights Auto Mobile Inspection'
+       });
+       await db.from('inspection_reports').update({status:'sent', updated_at: new Date().toISOString()}).eq('id', _currentReportId);
+@@ -1003,6 +1227,8 @@
+         </div>
+       </div>
+ 
++      ${w.section_status ? sectionStatusRowHtml(w.section_status, 'w') : '<div style="font-size:11px;color:var(--gray);margin-bottom:.8rem;">Section status not recorded (report submitted before this feature).</div>'}
++      ${scopeBlockHtml(w.section_status, 'w', w.roadtest, w.road_notes)}
+       <div style="font-weight:700;color:var(--gold);margin-bottom:.4rem;">VEHICLE</div>
+       <table style="width:100%;border-collapse:collapse;background:var(--steel);border-radius:6px;overflow:hidden;margin-bottom:1rem;">
+         ${wR('Year / Make / Model', (w.year||'')+ ' ' +(w.make||'')+' '+(w.model||''))}
+@@ -2579,55 +2805,56 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">Exterior &amp; Body</div>
+           <div style="padding:1.2rem;">
++            <div class="ss-slot" data-form="rpt" data-sec="exterior"></div>
+             <div style="font-size:11px;color:var(--gray);margin-bottom:1rem;">Rate each item: G = Good &nbsp;|&nbsp; F = Fair &nbsp;|&nbsp; P = Poor &nbsp;|&nbsp; N/A</div>
+             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem 1.5rem;">
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Hood</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-hood"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-hood"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Roof</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-roof"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-roof"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Front Bumper</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-frontbumper"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-frontbumper"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Rear Bumper</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-rearbumper"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-rearbumper"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Driver Door</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-driverdoor"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-driverdoor"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Passenger Door</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-passengerdoor"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-passengerdoor"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Rear Door(s)</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-reardoors"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-reardoors"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Trunk / Liftgate</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-trunkliftgate"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-trunkliftgate"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Windshield</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-windshield"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-windshield"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">All Glass</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-allglass"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-allglass"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Paint Overall</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-paintoverall"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-paintoverall"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Frame / Undercarriage</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-frameundercarriage"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-ext-frameundercarriage"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+             </div>
+             <div class="form-group" style="margin-top:1rem;"><label class="form-label">Exterior Notes</label><textarea class="form-input" rows="2" id="rpt-ext-notes" placeholder="Describe any damage, dents, rust, etc."></textarea></div>
+@@ -2638,54 +2865,55 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">Engine &amp; Mechanical</div>
+           <div style="padding:1.2rem;">
++            <div class="ss-slot" data-form="rpt" data-sec="engine"></div>
+             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem 1.5rem;">
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Engine Start</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-enginestart"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-enginestart"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Engine Noise</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-enginenoise"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-enginenoise"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Oil Condition</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-oilcondition"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-oilcondition"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Coolant Level</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-coolantlevel"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-coolantlevel"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Brake Fluid</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-brakefluid"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-brakefluid"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Power Steering Fluid</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-powersteeringfluid"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-powersteeringfluid"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Battery Condition</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-batterycondition"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-batterycondition"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Belts & Hoses</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-beltshoses"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-beltshoses"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Air Filter</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-airfilter"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-airfilter"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Transmission</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-transmission"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-transmission"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Exhaust System</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-exhaustsystem"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-exhaustsystem"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Suspension</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-suspension"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-eng-suspension"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+             </div>
+             <div class="form-group" style="margin-top:1rem;"><label class="form-label">Engine / Mechanical Notes</label><textarea class="form-input" rows="2" id="rpt-eng-notes" placeholder="Describe any issues, leaks, noises, codes..."></textarea></div>
+@@ -2696,37 +2924,38 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">Tires &amp; Brakes</div>
+           <div style="padding:1.2rem;">
++            <div class="ss-slot" data-form="rpt" data-sec="tires"></div>
+             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.8rem;">
+               <div style="background:var(--steel);border-radius:6px;padding:.8rem;">
+                 <div style="font-weight:700;font-size:12px;color:var(--gold);margin-bottom:.5rem;">Front Left</div>
+                 <div style="display:flex;flex-direction:column;gap:.4rem;">
+                   <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Tread (32nds)</span><input type="text" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="rpt-tire-fl-tread" placeholder="8"></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-fl-cond"><option value="G">G</option><option value="F">F</option><option value="P">P</option></select></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-fl"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-fl-cond"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-fl"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
+                 </div>
+               </div>
+               <div style="background:var(--steel);border-radius:6px;padding:.8rem;">
+                 <div style="font-weight:700;font-size:12px;color:var(--gold);margin-bottom:.5rem;">Front Right</div>
+                 <div style="display:flex;flex-direction:column;gap:.4rem;">
+                   <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Tread (32nds)</span><input type="text" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="rpt-tire-fr-tread" placeholder="8"></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-fr-cond"><option value="G">G</option><option value="F">F</option><option value="P">P</option></select></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-fr"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-fr-cond"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-fr"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
+                 </div>
+               </div>
+               <div style="background:var(--steel);border-radius:6px;padding:.8rem;">
+                 <div style="font-weight:700;font-size:12px;color:var(--gold);margin-bottom:.5rem;">Rear Left</div>
+                 <div style="display:flex;flex-direction:column;gap:.4rem;">
+                   <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Tread (32nds)</span><input type="text" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="rpt-tire-rl-tread" placeholder="8"></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-rl-cond"><option value="G">G</option><option value="F">F</option><option value="P">P</option></select></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-rl"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-rl-cond"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-rl"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
+                 </div>
+               </div>
+               <div style="background:var(--steel);border-radius:6px;padding:.8rem;">
+                 <div style="font-weight:700;font-size:12px;color:var(--gold);margin-bottom:.5rem;">Rear Right</div>
+                 <div style="display:flex;flex-direction:column;gap:.4rem;">
+                   <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Tread (32nds)</span><input type="text" class="form-input" style="width:60px;padding:4px 6px;font-size:12px;" id="rpt-tire-rr-tread" placeholder="8"></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-rr-cond"><option value="G">G</option><option value="F">F</option><option value="P">P</option></select></div>
+-                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-rr"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Condition</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-tire-rr-cond"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
++                  <div style="display:flex;align-items:center;gap:.5rem;font-size:12px;"><span style="flex:1;color:var(--gray);">Brake Pad</span><select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-brake-rr"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select></div>
+                 </div>
+               </div>
+ 
+@@ -2739,46 +2968,47 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">Interior</div>
+           <div style="padding:1.2rem;">
++            <div class="ss-slot" data-form="rpt" data-sec="interior"></div>
+             <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem 1.5rem;">
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Dashboard Lights</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-dashboardlights"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-dashboardlights"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">AC / Heat</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-acheat"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-acheat"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Windows & Switches</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-windowsswitches"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-windowsswitches"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Seats & Belts</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-seatsbelts"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-seatsbelts"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Horn</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-horn"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-horn"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Wipers</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-wipers"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-wipers"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Headlights</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-headlights"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-headlights"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Tail Lights</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-taillights"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-taillights"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Radio / Infotainment</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-radioinfotainment"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-radioinfotainment"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+               <div style="display:flex;align-items:center;justify-content:space-between;padding:.4rem 0;border-bottom:1px solid var(--border);">
+                 <span style="font-size:13px;">Sunroof / Moonroof</span>
+-                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-sunroofmoonroof"><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
++                <select class="form-input" style="width:80px;padding:4px 6px;font-size:12px;" id="rpt-int-sunroofmoonroof"><option value="" selected>—</option><option value="G">G</option><option value="F">F</option><option value="P">P</option><option value="NA">N/A</option></select>
+               </div>
+             </div>
+             <div class="form-group" style="margin-top:1rem;"><label class="form-label">Interior Notes</label><textarea class="form-input" rows="2" id="rpt-int-notes" placeholder="Describe any issues..."></textarea></div>
+@@ -2791,10 +3021,10 @@
+           <div style="padding:1.2rem;">
+             <div class="form-row">
+               <div class="form-group"><label class="form-label">Road Test Performed?</label>
+-                <select class="form-input" id="rpt-roadtest"><option value="Yes">Yes</option><option value="No">No</option></select>
++                <select class="form-input" id="rpt-roadtest"><option value="" selected>—</option><option value="Yes">Yes</option><option value="Limited">Limited</option><option value="No">No</option></select>
+               </div>
+               <div class="form-group"><label class="form-label">Overall Drive Quality</label>
+-                <select class="form-input" id="rpt-drive"><option value="G">Good</option><option value="F">Fair</option><option value="P">Poor</option></select>
++                <select class="form-input" id="rpt-drive"><option value="" selected>—</option><option value="G">Good</option><option value="F">Fair</option><option value="P">Poor</option><option value="NA">N/A</option></select>
+               </div>
+             </div>
+             <div class="form-group"><label class="form-label">Road Test Notes</label><textarea class="form-input" rows="3" id="rpt-road-notes" placeholder="Transmission shifts, steering, noise under load, braking..."></textarea></div>
+@@ -2852,7 +3082,7 @@
+           <div style="padding:1.2rem;">
+             <div class="form-row">
+               <div class="form-group"><label class="form-label">Overall Condition</label>
+-                <select class="form-input" id="rpt-verdict" style="font-weight:700;">
++                <select class="form-input" id="rpt-verdict" style="font-weight:700;"><option value="" selected>— Select —</option>
+                   <option value="BUY">✅ Recommend — Buy</option>
+                   <option value="CAUTION">⚠️ Proceed with Caution</option>
+                   <option value="PASS">❌ Do Not Buy</option>
+@@ -3012,6 +3242,7 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">⚙️ Engine</div>
+           <div style="padding:1.2rem;display:flex;flex-direction:column;gap:.8rem;">
++            <div class="ss-slot" data-form="w" data-sec="engine"></div>
+ 
+             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding:.6rem;background:var(--steel);border-radius:4px;">
+               <span style="font-size:13px;font-weight:600;">Belts / Hoses</span>
+@@ -3026,7 +3257,7 @@
+               <span style="font-size:13px;font-weight:600;">Varnish / Sludge</span>
+               <select class="form-input" style="width:160px;padding:5px 8px;font-size:12px;" id="w-varnish">
+                 <option value="">— Select —</option><option>None</option><option>Slight</option><option>Moderate</option><option>Heavy</option>
+-              </select>
++              <option>N/A</option></select>
+             </div>
+ 
+             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding:.6rem;background:var(--steel);border-radius:4px;">
+@@ -3067,6 +3298,7 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">🧪 Fluids</div>
+           <div style="padding:1.2rem;">
++            <div class="ss-slot" data-form="w" data-sec="fluids"></div>
+ 
+             <div style="font-weight:700;font-size:12px;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:.6rem;">Transmission Fluid</div>
+             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem;margin-bottom:1rem;">
+@@ -3134,12 +3366,13 @@
+         <div class="section-box" style="margin-bottom:1.2rem;">
+           <div class="section-box-header">🔍 Condition of Vehicle</div>
+           <div style="padding:1.2rem;display:flex;flex-direction:column;gap:.8rem;">
++            <div class="ss-slot" data-form="w" data-sec="condition"></div>
+ 
+             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding:.6rem;background:var(--steel);border-radius:4px;">
+               <span style="font-size:13px;font-weight:600;">Vehicle Condition</span>
+               <select class="form-input" style="width:160px;padding:5px 8px;font-size:12px;" id="w-veh-cond">
+                 <option value="">— Select —</option><option>Excellent</option><option>Good</option><option>Fair</option><option>Poor</option>
+-              </select>
++              <option>N/A</option></select>
+             </div>
+ 
+             <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;padding:.6rem;background:var(--steel);border-radius:4px;">
+@@ -3570,7 +3803,9 @@
+     document.querySelectorAll('[id^="insp-"]').forEach(p=>p.classList.remove('active'));
+     document.getElementById('insp-'+t).classList.add('active');
+     if(el){document.querySelectorAll('#page-inspector .sidebar-item').forEach(s=>s.classList.remove('active'));el.classList.add('active');}
++    if(t==='enter-job' || t==='warranty') renderSecSlots();
+   }
++  document.addEventListener('DOMContentLoaded', () => { try { renderSecSlots(); } catch(e) {} });
+ 
+   // Inspector selection in assign panel
+   function selectInspector(el){
+@@ -4303,6 +4538,7 @@
+         <div style="font-size:12px;color:var(--gray);">Plate: ${rpt.plate||'—'} &nbsp;·&nbsp; Date: ${rpt.date||'—'}</div>
+       </div>
+ 
++      ${scopeBlockHtml(rpt.section_status, 'rpt', rpt.roadtest, rpt.road_notes)}
+       <div style="font-weight:700;color:var(--gold);margin-bottom:.4rem;">EXTERIOR</div>
+       <table style="width:100%;border-collapse:collapse;background:var(--steel);border-radius:6px;overflow:hidden;margin-bottom:1rem;">
+         ${Object.entries(rpt.exterior||{}).filter(([k])=>k!=='notes').map(([k,v])=>`<tr><td style="padding:5px 10px;color:var(--gray);width:50%;text-transform:capitalize;">${k.replace(/([A-Z])/g,' $1')}</td><td style="padding:5px 10px;">${rb(v)}</td></tr>`).join('')}
+@@ -4409,7 +4645,7 @@
+         experience: '',
+         certifications: '',
+         title:   'Warranty Inspection Report — ' + (data.warranty_company||'') + ' Claim #' + (data.claim_number||'—'),
+-        message: message + ' | VEHICLE: ' + (data.vehicle||'—') + ' | VIN: ' + (data.vin||'—') + ' | SHOP: ' + (data.shop_name||'—') + ' | CAUSE: ' + (w.cause||'—') + ' | INSPECTOR: ' + (data.submitted_by||'Knights Auto') + ' | DATE: ' + new Date(data.submitted_at).toLocaleDateString()
++        message: message + ' | VEHICLE: ' + (data.vehicle||'—') + ' | VIN: ' + (data.vin||'—') + ' | SHOP: ' + (data.shop_name||'—') + ' | CAUSE: ' + (w.cause||'—') + ' | INSPECTOR: ' + (data.submitted_by||'Knights Auto') + ' | DATE: ' + new Date(data.submitted_at).toLocaleDateString() + scopeText(w.section_status, 'w', w.roadtest, w.road_notes)
+       });
+       await db.from('warranty_reports').update({status:'submitted_to_company', updated_at: new Date().toISOString()}).eq('id', _currentWarrantyForEmail);
+       closeModal('warranty-send');
