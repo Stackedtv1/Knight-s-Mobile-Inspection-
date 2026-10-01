@@ -6,6 +6,7 @@
 <title>Knights Mobile Inspection — Report Generator</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <style>
 :root {
   --bg:#0b0d12;--surface:#13161e;--card:#181c27;--border:#242836;
@@ -1042,15 +1043,15 @@ pdz.addEventListener('drop', e=>{e.preventDefault();pdz.classList.remove('drag-o
 function handleVideos(files) {
   const remaining = 5 - videos.length;
   if (remaining <= 0) { showToast('⚠️ Video limit reached (5 max)'); return; }
-  const MAX_VIDEO_BYTES = 80 * 1024 * 1024; // 80MB — beyond this, encoding to base64 risks crashing the tab
+  const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50MB — cloud upload limit per clip (Supabase free plan)
   Array.from(files).slice(0, remaining).forEach(file => {
     if (file.size > MAX_VIDEO_BYTES) {
-      showToast('⚠️ ' + file.name + ' is too large (' + Math.round(file.size/1024/1024) + 'MB) — keep clips under 80MB');
+      showToast('⚠️ ' + file.name + ' is ' + Math.round(file.size/1024/1024) + 'MB — clips must be under 50MB (about 40 sec at 1080p)');
       return;
     }
     const objUrl = URL.createObjectURL(file);
     const reader = new FileReader();
-    reader.onload = e => { videos.push({name:file.name, dataUrl:e.target.result, objectUrl:objUrl}); renderVideoGrid(); };
+    reader.onload = e => { videos.push({name:file.name, dataUrl:e.target.result, objectUrl:objUrl, file:file, url:null}); renderVideoGrid(); };
     reader.onerror = () => showToast('⚠️ Could not process ' + file.name);
     reader.readAsDataURL(file);
   });
@@ -1252,6 +1253,53 @@ function setProgress(pct, label) {
 // ═══════════════════════════════════════════════════════════════
 // PDF GENERATION
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// VIDEO UPLOAD — puts clips online so customers get a tap-to-play link
+// ═══════════════════════════════════════════════════════════════
+const SB_URL = 'https://tcgqufgtdfduwvriarkc.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjZ3F1Zmd0ZGZkdXd2cmlhcmtjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNjk5ODMsImV4cCI6MjA5Mzg0NTk4M30.0wfQ7a_fIYAM_nUhQCwVKt7VjA6Nb4wG-6i9FNznhqA';
+const VIDEO_BUCKET = 'inspection-videos';
+
+function randId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 12);
+}
+
+// Uploads any clip that doesn't have a link yet. Returns how many failed.
+async function uploadVideos(onStep) {
+  let failed = 0;
+  if (!navigator.onLine) return videos.filter(v=>!v.url).length;
+  const folder = (g('reportNum') || 'report').replace(/[^A-Za-z0-9_-]/g, '_');
+  for (let i = 0; i < videos.length; i++) {
+    const v = videos[i];
+    if (v.url) continue;
+    if (onStep) onStep(i);
+    try {
+      const blob = v.file || await (await fetch(v.dataUrl)).blob();
+      const type = blob.type || 'video/quicktime';
+      const safe = v.name.replace(/[^A-Za-z0-9._-]/g, '_');
+      const path = `${folder}/${randId()}-${safe}`;
+      const res = await fetch(`${SB_URL}/storage/v1/object/${VIDEO_BUCKET}/${path}`, {
+        method: 'POST',
+        headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY, 'Content-Type': type, 'x-upsert': 'false' },
+        body: blob
+      });
+      if (!res.ok) throw new Error(res.status + ' ' + (await res.text()).slice(0, 200));
+      v.url = `${SB_URL}/storage/v1/object/public/${VIDEO_BUCKET}/${path}`;
+    } catch (e) {
+      console.warn('Video upload failed:', v.name, e);
+      failed++;
+    }
+  }
+  return failed;
+}
+
+function videoLinksText() {
+  const withUrl = videos.filter(v=>v.url);
+  if (!withUrl.length) return '';
+  return 'Inspection videos (tap to watch):\n' + withUrl.map((v,i)=>`Video ${i+1}: ${v.url}`).join('\n');
+}
+
 async function generatePDF() {
   const reviewErrs = reviewReport().filter(i=>i.level==='err');
   if (reviewErrs.length) {
@@ -1268,6 +1316,13 @@ async function generatePDF() {
   prog.classList.add('show');
   setProgress(5,'Initializing...');
   await tick();
+
+  if (videos.some(v=>!v.url)) {
+    const failed = await uploadVideos(i => setProgress(5 + Math.round(10*i/videos.length), `Uploading video ${i+1} of ${videos.length}...`));
+    if (failed) showToast(navigator.onLine
+      ? `⚠️ ${failed} video${failed>1?'s':''} didn't upload — they'll be listed without a link. Regenerate to retry.`
+      : '📴 Offline — videos will be listed without links. Regenerate when you have signal.');
+  }
 
   try {
     const {jsPDF} = window.jspdf;
@@ -1649,20 +1704,53 @@ async function generatePDF() {
 
     // ══ VIDEO LIST ══════════════════════════════════════════
     if (videos.length > 0) {
-      setProgress(82,'Adding video index...'); await tick();
-      needsPage(50+videos.length*28);
+      setProgress(82,'Adding video links...'); await tick();
+      const ROW = 78, QR = 64;
+      needsPage(50+Math.min(videos.length,2)*(ROW+8));
       y += 10;
-      hdr('VIDEO DOCUMENTATION', `${videos.length} video clips attached to this inspection`);
+      const linked = videos.filter(v=>v.url).length;
+      hdr('VIDEO DOCUMENTATION', linked
+        ? `${videos.length} video clip${videos.length>1?'s':''} — tap the link or scan the QR code to watch`
+        : `${videos.length} video clip${videos.length>1?'s':''} recorded for this inspection`);
       videos.forEach((v,i)=>{
-        needsPage(30);
+        if (!v.url) {
+          needsPage(30);
+          doc.setFillColor(240,248,255);
+          doc.roundedRect(M, y, W-2*M, 22, 4, 4, 'F');
+          doc.setFillColor(...C.gold); doc.triangle(M+11, y+6, M+11, y+16, M+20, y+11, 'F');
+          doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(40,50,80);
+          doc.text(`Video ${i+1}: ${v.name}`, M+30, y+15);
+          doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C.muted);
+          doc.text('(Video file provided separately with this report)', W-M-10, y+15, {align:'right'});
+          y += 28;
+          return;
+        }
+        needsPage(ROW+8);
         doc.setFillColor(240,248,255);
-        doc.roundedRect(M, y, W-2*M, 22, 4, 4, 'F');
-        doc.setFillColor(...C.gold); doc.triangle(M+11, y+6, M+11, y+16, M+20, y+11, 'F');
-        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(40,50,80);
-        doc.text(`Video ${i+1}: ${v.name}`, M+30, y+15);
-        doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(...C.muted);
-        doc.text('(Video file provided separately with this report)', W-M-10, y+15, {align:'right'});
-        y += 28;
+        doc.roundedRect(M, y, W-2*M, ROW, 5, 5, 'F');
+        // play icon + title
+        doc.setFillColor(...C.gold); doc.triangle(M+12, y+14, M+12, y+26, M+22, y+20, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(40,50,80);
+        doc.text(`Video ${i+1}: ${v.name}`, M+30, y+24);
+        // clickable button
+        const bx = M+30, by = y+36, bw = 150, bh = 22;
+        doc.setFillColor(...C.dark); doc.roundedRect(bx, by, bw, bh, 4, 4, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(...C.gold);
+        doc.text('TAP TO WATCH VIDEO', bx+bw/2, by+14.5, {align:'center'});
+        doc.link(bx, by, bw, bh, {url: v.url});
+        doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(...C.muted);
+        doc.text('Opens in your browser. Or scan the QR code with your phone camera.', bx+bw+10, by+14, {maxWidth: W-2*M-bw-QR-60});
+        // QR code drawn as vector squares
+        try {
+          const qr = qrcode(0, 'M'); qr.addData(v.url); qr.make();
+          const n = qr.getModuleCount(), cell = QR/n;
+          const qx = W-M-QR-7, qy = y+7;
+          doc.setFillColor(255,255,255); doc.rect(qx-3, qy-3, QR+6, QR+6, 'F');
+          doc.setFillColor(0,0,0);
+          for (let r=0;r<n;r++) for (let c=0;c<n;c++) if (qr.isDark(r,c)) doc.rect(qx+c*cell, qy+r*cell, cell+0.1, cell+0.1, 'F');
+          doc.link(qx, qy, QR, QR, {url: v.url});
+        } catch(e) { console.warn('QR failed', e); }
+        y += ROW + 8;
       });
     }
 
@@ -1818,6 +1906,16 @@ async function shareReport() {
   if (!lastPdfBlob) { showToast('⚠️ Generate a report first.'); return; }
   const pdfFile = new File([lastPdfBlob], lastPdfFilename, {type:'application/pdf'});
 
+  // Videos already online → share the PDF with the watch links in the message (no giant attachments)
+  if (videos.length && videos.every(v=>v.url)) {
+    const shareData = { files:[pdfFile], text: `Your inspection report is attached.\n\n${videoLinksText()}` };
+    if (navigator.canShare && navigator.canShare(shareData)) {
+      try { await navigator.share(shareData); showToast('✅ Share sheet opened — video links included'); }
+      catch (e) { if (e.name !== 'AbortError') showToast('⚠️ Share failed — try Download + attach manually.'); }
+      return;
+    }
+  }
+
   // Convert any recorded video clips (stored as data URLs) into File objects
   const videoFiles = [];
   for (const v of videos) {
@@ -1873,7 +1971,7 @@ Attached is your ${reportType} for the ${g('vYear')} ${g('vMake')} ${g('vModel')
 
 Report #: ${g('reportNum')}
 Overall Result: ${overall}
-
+${videoLinksText() ? '\n' + videoLinksText() + '\n' : ''}
 Please let us know if you have any questions.
 
 Knights Mobile Inspection
