@@ -1,4 +1,4 @@
-const CACHE = 'kmi-v1';
+const CACHE = 'kmi-v2';
 const ASSETS = [
   './',
   './index.html',
